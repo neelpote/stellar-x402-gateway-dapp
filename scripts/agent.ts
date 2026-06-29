@@ -44,7 +44,7 @@ async function main() {
     const fetchWithPayment = wrapFetchWithPayment(fetch, client);
 
     const targetUrl = "http://localhost:3000/api/market-data";
-    console.log(`Sending authenticated pay-per-call GET request to: ${targetUrl}`);
+    console.log(`Sending authenticated pay-per-call GET request to: ${targetUrl} (USDC stellar:testnet)`);
 
     const response = await fetchWithPayment(targetUrl, {
       method: "GET",

@@ -8,7 +8,9 @@
     "start": "next start",
     "test": "jest",
     "test:agent": "tsx scripts/agent.ts",
-    "test:bounce": "tsx scripts/test-402-bounce.ts"
+    "test:bounce": "tsx scripts/test-402-bounce.ts",
+    "setup:keys": "tsx scripts/generate-and-setup.ts",
+    "check:balances": "tsx scripts/check-balances.ts"
   },
   "dependencies": {
     "@x402/core": "^2.0.0",

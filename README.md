@@ -62,9 +62,12 @@ npm install
 ### 2. Auto-Provision Stellar Accounts
 Run the setup utility to generate fresh keypairs, fund them on the Testnet ledger via Friendbot, and configure USDC trustlines:
 ```bash
-npx tsx scripts/generate-and-setup.ts
+npm run setup:keys
 ```
-This script will output the keys and write them automatically to your `.env.local` file.
+This script will output the keys and write them automatically to your `.env.local` file. You can inspect balance levels at any time using:
+```bash
+npm run check:balances
+```
 
 ### 3. Claim Testnet USDC
 Go to the [Circle Faucet](https://faucet.circle.com/), select the **Stellar** network, paste your **Agent's Public Key** (generated in the previous step), and claim your dev tokens.

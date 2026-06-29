@@ -1,5 +1,6 @@
 import React from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import "@testing-library/jest-dom";
 import Home from "../pages/index";
 
 describe("Stellar x402 Gateway Dashboard", () => {

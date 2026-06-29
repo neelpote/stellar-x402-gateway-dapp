@@ -27,6 +27,7 @@ export default function Home() {
   const [walletConnected, setWalletConnected] = useState(true);
   const [walletAddress] = useState("GBMXRWVHM4JA3VPIB7BT25WMEKJQX4OXCWT5BZZGQWKLACUFKETZZ6CF");
   const [simulateFailure, setSimulateFailure] = useState(false);
+  const [selectedReport, setSelectedReport] = useState("premium_report_2026");
   const [isLoading, setIsLoading] = useState(false);
   const [premiumData, setPremiumData] = useState<any>(null);
   const [logs, setLogs] = useState<TelemetryLog[]>([]);
@@ -93,10 +94,18 @@ export default function Home() {
     addLog("info", "Retrying GET /api/market-data with transaction proof header...");
 
     await new Promise((resolve) => setTimeout(resolve, 800));
+    
+    let ipfsHash = "ipfs://QmXoypizjW3WknFixtnd";
+    if (selectedReport === "telemetry_node_alpha") {
+      ipfsHash = "ipfs://QmNodeAlphaDiagnostics11235";
+    } else if (selectedReport === "stellar_m2m_insights") {
+      ipfsHash = "ipfs://QmStellarM2MEconomy2026";
+    }
+
     const mockData = {
       success: true,
       timestamp: new Date().toISOString(),
-      ipfs: "ipfs://QmXoypizjW3WknFixtnd",
+      ipfs: ipfsHash,
       data: {
         asset: "USDC",
         price: "1.00",
@@ -186,22 +195,37 @@ export default function Home() {
               Fetch premium market telemetry data. The request will automatically trigger an on-chain pay-per-call handshake of 0.01 USDC.
             </p>
 
-            <div className="flex flex-col sm:flex-row gap-4 items-center justify-between bg-slate-950/60 p-4 rounded-xl border border-slate-800/80 mb-6">
-              <div className="flex items-center gap-2">
-                <input 
-                  type="checkbox" 
-                  id="simulate-failure" 
-                  checked={simulateFailure}
-                  onChange={(e) => setSimulateFailure(e.target.checked)}
-                  className="rounded border-slate-700 text-stellarPrimary focus:ring-stellarPrimary/40 bg-slate-900 h-4 w-4"
-                />
-                <label htmlFor="simulate-failure" className="text-sm font-medium text-slate-300 cursor-pointer">
-                  Simulate Payment Failure (e.g. Insufficient Funds)
-                </label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+              <div className="flex flex-col gap-1.5 text-left">
+                <label htmlFor="report-select" className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Select Premium Resource</label>
+                <select
+                  id="report-select"
+                  value={selectedReport}
+                  onChange={(e) => {
+                    setSelectedReport(e.target.value);
+                    addLog("info", `Target resource changed to: ${e.target.value}`);
+                  }}
+                  className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-stellarPrimary transition-colors w-full cursor-pointer"
+                >
+                  <option value="premium_report_2026">USDC Liquidity Analysis (2026)</option>
+                  <option value="telemetry_node_alpha">Node Alpha Health Diagnostics</option>
+                  <option value="stellar_m2m_insights">Stellar M2M Economy Insights</option>
+                </select>
               </div>
-
-              <div className="text-xs text-slate-500">
-                Network: <span className="text-slate-400 font-mono">stellar:testnet</span>
+              
+              <div className="flex flex-col gap-1.5 justify-end">
+                <div className="flex items-center gap-2 bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/80">
+                  <input 
+                    type="checkbox" 
+                    id="simulate-failure" 
+                    checked={simulateFailure}
+                    onChange={(e) => setSimulateFailure(e.target.checked)}
+                    className="rounded border-slate-700 text-stellarPrimary focus:ring-stellarPrimary/40 bg-slate-900 h-4 w-4"
+                  />
+                  <label htmlFor="simulate-failure" className="text-xs font-semibold text-slate-300 cursor-pointer">
+                    Simulate Payment Failure
+                  </label>
+                </div>
               </div>
             </div>
 

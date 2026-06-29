@@ -28,7 +28,7 @@ jest.mock("@x402/stellar/exact/server", () => {
   };
 });
 
-import handler, { config } from "../pages/api/market-data";
+import handler, { config } from "@/pages/api/market-data";
 
 describe("Market Data API Route Configuration", () => {
   it("should export handler as a valid Next.js route handler function", () => {

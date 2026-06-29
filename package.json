@@ -1,0 +1,30 @@
+{
+  "name": "pay-per-call-stellar-api",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "test:agent": "tsx scripts/agent.ts",
+    "test:bounce": "tsx scripts/test-402-bounce.ts"
+  },
+  "dependencies": {
+    "next": "^14.2.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "express": "^4.19.2",
+    "@x402/core": "^2.0.0",
+    "@x402/stellar": "^2.0.0",
+    "@x402/express": "^2.0.0",
+    "@x402/fetch": "^2.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@types/node": "^20.14.9",
+    "@types/express": "^4.17.21",
+    "tsx": "^4.15.7"
+  }
+}

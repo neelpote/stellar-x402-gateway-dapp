@@ -1,5 +1,7 @@
 # 🌌 Stellar x402 Pay-Per-Request Gateway dApp
 
+**Live Demo:** [stellar-x402-gateway-dapp.vercel.app](https://stellar-x402-gateway-dapp.vercel.app)
+
 [![CI/CD Pipeline](https://github.com/stellar-x402-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Soroban SDK Version](https://img.shields.io/badge/Soroban%20SDK-21.7.7-blue)](https://crates.io/crates/soroban-sdk)

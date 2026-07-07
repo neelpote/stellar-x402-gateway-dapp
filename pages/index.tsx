@@ -1,20 +1,31 @@
-import React, { useState, useEffect } from "react";
-import { 
-  Wallet, 
-  Activity, 
-  Terminal as TerminalIcon, 
-  Loader2, 
-  CheckCircle, 
-  XCircle, 
-  Play, 
+import React, { useEffect, useMemo, useState } from "react";
+import Head from "next/head";
+import {
+  Activity,
+  AlertTriangle,
   ArrowRight,
-  TrendingUp
+  CheckCircle2,
+  CircleDollarSign,
+  Database,
+  Loader2,
+  Lock,
+  Play,
+  RefreshCcw,
+  Server,
+  ShieldCheck,
+  Terminal as TerminalIcon,
+  Unplug,
+  Wallet,
+  XCircle,
 } from "lucide-react";
+
+type LogType = "info" | "success" | "error" | "warn";
+type QueryPhase = "idle" | "probe" | "challenge" | "settlement" | "retry" | "complete" | "failed";
 
 interface TelemetryLog {
   id: string;
   timestamp: string;
-  type: "info" | "success" | "error" | "warn";
+  type: LogType;
   message: string;
 }
 
@@ -23,414 +34,630 @@ interface ToastMessage {
   text: string;
 }
 
+interface PremiumData {
+  success: boolean;
+  timestamp: string;
+  ipfs: string;
+  data: {
+    asset: string;
+    price: string;
+    volume_24h: string;
+    change_24h: string;
+    recipient: string;
+  };
+}
+
+const walletAddress = "GBMXRWVHM4JA3VPIB7BT25WMEKJQX4OXCWT5BZZGQWKLACUFKETZZ6CF";
+
+const resources = {
+  premium_report_2026: {
+    label: "USDC Liquidity Analysis",
+    description: "Live-priced stablecoin index with settlement metadata.",
+    ipfs: "ipfs://QmXoypizjW3WknFixtnd",
+  },
+  telemetry_node_alpha: {
+    label: "Node Alpha Diagnostics",
+    description: "Validator response windows and facilitator health checks.",
+    ipfs: "ipfs://QmNodeAlphaDiagnostics11235",
+  },
+  stellar_m2m_insights: {
+    label: "M2M Economy Insights",
+    description: "Machine-to-machine payment demand and registry volume.",
+    ipfs: "ipfs://QmStellarM2MEconomy2026",
+  },
+} as const;
+
+const phaseSteps: Array<{ id: QueryPhase; label: string; detail: string }> = [
+  { id: "probe", label: "Probe", detail: "Request without proof" },
+  { id: "challenge", label: "Challenge", detail: "Receive HTTP 402" },
+  { id: "settlement", label: "Settle", detail: "Sign Stellar payment" },
+  { id: "retry", label: "Retry", detail: "Attach payment proof" },
+  { id: "complete", label: "Unlock", detail: "Return registry data" },
+];
+
+type ResourceId = keyof typeof resources;
+
+const phaseCopy: Record<QueryPhase, string> = {
+  idle: "Ready",
+  probe: "Probing API",
+  challenge: "402 challenge",
+  settlement: "Signing payment",
+  retry: "Retrying resource",
+  complete: "Unlocked",
+  failed: "Failed",
+};
+
+const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+const probeTimeoutMs = 3500;
+
+const createLogId = () =>
+  globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).substring(2, 9);
+
 export default function Home() {
-  // Mock states
   const [walletConnected, setWalletConnected] = useState(true);
-  const [walletAddress] = useState("GBMXRWVHM4JA3VPIB7BT25WMEKJQX4OXCWT5BZZGQWKLACUFKETZZ6CF");
   const [simulateFailure, setSimulateFailure] = useState(false);
-  const [selectedReport, setSelectedReport] = useState("premium_report_2026");
+  const [selectedReport, setSelectedReport] = useState<ResourceId>("premium_report_2026");
   const [isLoading, setIsLoading] = useState(false);
-  const [premiumData, setPremiumData] = useState<any>(null);
+  const [phase, setPhase] = useState<QueryPhase>("idle");
+  const [premiumData, setPremiumData] = useState<PremiumData | null>(null);
   const [logs, setLogs] = useState<TelemetryLog[]>([]);
   const [toast, setToast] = useState<ToastMessage | null>(null);
 
-  // Initialize with initial telemetry logs
-  useEffect(() => {
-    addLog("info", "System initialized. x402 resource server online.");
-    addLog("info", "Stellar testnet listener registered at channels.openzeppelin.com.");
-  }, []);
+  const selectedResource = resources[selectedReport];
 
-  const addLog = (type: "info" | "success" | "error" | "warn", message: string) => {
+  const shortWallet = useMemo(
+    () => `${walletAddress.substring(0, 6)}...${walletAddress.slice(-4)}`,
+    []
+  );
+
+  const phaseIndex = useMemo(
+    () => phaseSteps.findIndex((step) => step.id === phase),
+    [phase]
+  );
+
+  const addLog = (type: LogType, message: string) => {
     const newLog: TelemetryLog = {
-      id: Math.random().toString(36).substring(2, 9),
-      timestamp: new Date().toLocaleTimeString(),
+      id: createLogId(),
+      timestamp: new Date().toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      }),
       type,
       message,
     };
-    setLogs((prev) => [newLog, ...prev]);
+    setLogs((prev) => [newLog, ...prev].slice(0, 24));
   };
 
-  const triggerToast = (type: "success" | "error" | "info", text: string) => {
+  const triggerToast = (type: ToastMessage["type"], text: string) => {
     setToast({ type, text });
-    setTimeout(() => {
-      setToast(null);
-    }, 4500);
+    window.setTimeout(() => setToast(null), 4200);
+  };
+
+  useEffect(() => {
+    addLog("info", "Resource server online at /api/market-data.");
+    addLog("info", "OpenZeppelin facilitator channel configured for stellar:testnet.");
+  }, []);
+
+  const probeProtectedResource = async () => {
+    setPhase("probe");
+    addLog("info", "GET /api/market-data without payment proof.");
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), probeTimeoutMs);
+
+    try {
+      const response = await fetch("/api/market-data", {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        signal: controller.signal,
+      });
+
+      if (response.status === 402) {
+        setPhase("challenge");
+        addLog("warn", "HTTP 402 received. Payment requirement challenge is active.");
+        return;
+      }
+
+      if (response.ok) {
+        addLog("success", "API returned 200. Existing payment proof was accepted.");
+        return;
+      }
+
+      addLog("warn", `API responded with HTTP ${response.status}; continuing demo settlement.`);
+    } catch (error) {
+      const message =
+        error instanceof DOMException && error.name === "AbortError"
+          ? `Probe timed out after ${probeTimeoutMs / 1000}s`
+          : error instanceof Error
+            ? error.message
+            : "Unknown network error";
+      addLog("warn", `API probe could not complete: ${message}`);
+    } finally {
+      window.clearTimeout(timeoutId);
+    }
   };
 
   const handleQuery = async () => {
     if (!walletConnected) {
-      triggerToast("error", "Connect your wallet to authorize.");
+      triggerToast("error", "Connect your wallet before running a gated query.");
+      addLog("error", "Query blocked because no wallet is connected.");
       return;
     }
 
     setIsLoading(true);
     setPremiumData(null);
-    addLog("info", "Initiated Premium Resource Retrieval: GET /api/market-data");
 
-    // Phase 1: Bounce
-    await new Promise((resolve) => setTimeout(resolve, 600));
-    addLog("warn", "HTTP 402 Gating Triggered: Client challenged for payment proof.");
+    await probeProtectedResource();
+    await wait(500);
 
-    // Phase 2: Requirements
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    addLog("info", "Parsed requirement: 0.01 USDC exact on stellar:testnet -> GAAJFP5Q...PI");
-
-    // Phase 3: Sign/Verify
-    await new Promise((resolve) => setTimeout(resolve, 700));
-    addLog("info", "Requesting signature on USDC transfer transaction...");
+    setPhase("settlement");
+    addLog("info", "Preparing 0.01 USDC exact payment on stellar:testnet.");
+    await wait(600);
+    addLog("info", "Requesting wallet signature for settlement transaction.");
+    await wait(700);
 
     if (simulateFailure) {
-      await new Promise((resolve) => setTimeout(resolve, 700));
-      addLog("error", "Transaction submission aborted: Insufficient USDC testnet balance.");
-      triggerToast("error", "Payment failed: Insufficient USDC balance.");
+      setPhase("failed");
+      addLog("error", "Transaction rejected: simulated insufficient USDC testnet balance.");
+      triggerToast("error", "Payment failed. Add testnet USDC or disable failure mode.");
       setIsLoading(false);
       return;
     }
 
-    // Success path
-    await new Promise((resolve) => setTimeout(resolve, 900));
-    addLog("success", "Transaction signed. Hash: 5b45bfe2c55448e16b65a108aa49232d25190a5c9dc72ac5952b423b5154d8c7");
-    
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    addLog("info", "Retrying resource fetch with on-chain settlement headers...");
+    addLog(
+      "success",
+      "Transaction signed. Hash 5b45bfe2c55448e16b65a108aa49232d25190a5c9dc72ac5952b423b5154d8c7."
+    );
+    await wait(650);
 
-    await new Promise((resolve) => setTimeout(resolve, 700));
-    
-    let ipfsHash = "ipfs://QmXoypizjW3WknFixtnd";
-    if (selectedReport === "telemetry_node_alpha") {
-      ipfsHash = "ipfs://QmNodeAlphaDiagnostics11235";
-    } else if (selectedReport === "stellar_m2m_insights") {
-      ipfsHash = "ipfs://QmStellarM2MEconomy2026";
-    }
+    setPhase("retry");
+    addLog("info", "Retrying resource fetch with settlement proof headers.");
+    await wait(700);
 
-    const mockData = {
+    const mockData: PremiumData = {
       success: true,
       timestamp: new Date().toISOString(),
-      ipfs: ipfsHash,
+      ipfs: selectedResource.ipfs,
       data: {
         asset: "USDC",
         price: "1.00",
         volume_24h: "54,201,948",
         change_24h: "+0.02%",
-        recipient: "GAAJFP5Q4U76HQXINWVS7STDQP75VLJIRDLY2MAOQ5A3BZ73QZ6NR7PI"
-      }
+        recipient: "GAAJFP5Q4U76HQXINWVS7STDQP75VLJIRDLY2MAOQ5A3BZ73QZ6NR7PI",
+      },
     };
-    
+
     setPremiumData(mockData);
-    addLog("success", "HTTP 200 OK: DataRegistry cross-contract lookup successful.");
-    triggerToast("success", "Handshake completed! Premium registry unlocked.");
+    setPhase("complete");
+    addLog("success", `${selectedResource.label} unlocked from the DataRegistry contract.`);
+    triggerToast("success", "Premium registry unlocked.");
     setIsLoading(false);
   };
 
   const toggleWallet = () => {
-    setWalletConnected(!walletConnected);
-    addLog("info", walletConnected ? "Wallet disconnected." : `Wallet connected: ${walletAddress}`);
-    triggerToast("info", walletConnected ? "Wallet disconnected" : "Wallet connected successfully");
+    setWalletConnected((current) => {
+      const nextValue = !current;
+      addLog("info", nextValue ? `Wallet connected: ${shortWallet}` : "Wallet disconnected.");
+      triggerToast("info", nextValue ? "Wallet connected" : "Wallet disconnected");
+      return nextValue;
+    });
+  };
+
+  const resetSession = () => {
+    setPremiumData(null);
+    setPhase("idle");
+    setLogs([]);
+    triggerToast("info", "Session cleared");
   };
 
   return (
-    <div className="min-h-screen bg-[#F3F0EE] text-[#141413] flex flex-col items-center px-4 md:px-8 pt-24 font-sans selection:bg-[#CF4500] selection:text-white pb-36 relative overflow-hidden">
-      
-      {/* Background Graphic Watermark */}
-      <div className="absolute -top-24 -left-36 text-[180px] font-bold text-[#E8E2DA] select-none pointer-events-none tracking-tighter opacity-70 z-0">
-        MC / x402
-      </div>
+    <div className="min-h-screen bg-[#ECE9E2] text-[#151515] font-sans selection:bg-[#CF4500] selection:text-white">
+      <Head>
+        <title>Stellar x402 Gateway</title>
+        <meta
+          name="description"
+          content="A Stellar testnet control room for x402 pay-per-request resource access."
+        />
+        <link
+          rel="icon"
+          href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23151515'/%3E%3Ccircle cx='26' cy='32' r='15' fill='%23EB001B'/%3E%3Ccircle cx='38' cy='32' r='15' fill='%23F79E1B' fill-opacity='.9'/%3E%3C/svg%3E"
+        />
+      </Head>
 
-      {/* Interactive Toast */}
       {toast && (
-        <div 
+        <div
           role="alert"
-          className={`fixed top-6 right-6 z-50 flex items-center gap-3 px-5 py-3.5 rounded-mcButton shadow-cardShadow border transition-all ${
-            toast.type === "success" 
-              ? "bg-[#FCFBFA] border-emerald-500 text-emerald-900"
+          className={`fixed right-4 top-4 z-50 flex max-w-[calc(100vw-2rem)] items-center gap-3 rounded-[8px] border px-4 py-3 shadow-[0_16px_40px_rgba(20,20,19,0.14)] md:right-8 md:top-8 ${
+            toast.type === "success"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-900"
               : toast.type === "error"
-              ? "bg-[#FCFBFA] border-[#CF4500] text-[#CF4500]"
-              : "bg-[#FCFBFA] border-slate-300 text-slate-900"
+                ? "border-red-200 bg-red-50 text-red-900"
+                : "border-slate-200 bg-white text-slate-900"
           }`}
         >
-          {toast.type === "success" && <CheckCircle className="h-5 w-5 text-emerald-600" />}
-          {toast.type === "error" && <XCircle className="h-5 w-5 text-[#CF4500]" />}
-          {toast.type === "info" && <Activity className="h-5 w-5 text-blue-600" />}
+          {toast.type === "success" && <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" />}
+          {toast.type === "error" && <XCircle className="h-5 w-5 shrink-0 text-red-600" />}
+          {toast.type === "info" && <Activity className="h-5 w-5 shrink-0 text-[#3860BE]" />}
           <span className="text-sm font-medium">{toast.text}</span>
         </div>
       )}
 
-      {/* Floating Navigation Pill */}
-      <nav className="fixed top-6 left-4 right-4 max-w-5xl mx-auto bg-white/95 backdrop-blur-md h-16 rounded-pill shadow-navShadow border border-slate-100 flex justify-between items-center px-6 z-40">
-        <div className="flex items-center gap-2">
-          {/* Mock MasterCard Circles */}
-          <div className="flex -space-x-2">
-            <div className="w-5 h-5 rounded-full bg-[#EB001B]" />
-            <div className="w-5 h-5 rounded-full bg-[#F79E1B] opacity-85" />
+      <header className="sticky top-0 z-40 border-b border-[#D9D2C7] bg-[#ECE9E2]/95 backdrop-blur">
+        <nav className="mx-auto flex min-h-16 w-full max-w-6xl items-center justify-between gap-4 px-4 py-3 md:px-6">
+          <a
+            href="#dashboard"
+            className="flex min-w-0 items-center gap-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#CF4500]"
+          >
+            <span className="flex -space-x-2" aria-hidden="true">
+              <span className="h-6 w-6 rounded-full bg-[#EB001B]" />
+              <span className="h-6 w-6 rounded-full bg-[#F79E1B]/90" />
+            </span>
+            <span className="truncate text-sm font-bold tracking-normal">Stellar x402 Gateway</span>
+          </a>
+
+          <div className="hidden items-center gap-6 text-sm font-medium text-slate-600 md:flex">
+            <a href="#controller" className="transition-colors hover:text-[#151515]">
+              Controller
+            </a>
+            <a href="#registry" className="transition-colors hover:text-[#151515]">
+              Registry
+            </a>
+            <a href="#telemetry" className="transition-colors hover:text-[#151515]">
+              Telemetry
+            </a>
           </div>
-          <span className="text-sm font-bold tracking-tight text-[#141413] ml-1">x402 Gateway</span>
-        </div>
 
-        <div className="hidden md:flex gap-8 text-sm font-medium text-slate-600">
-          <a href="#dashboard" className="hover:text-black transition-colors">Overview</a>
-          <a href="#registry" className="hover:text-black transition-colors">Registry</a>
-          <a href="#telemetry" className="hover:text-black transition-colors">Telemetry</a>
-        </div>
+          <button
+            onClick={toggleWallet}
+            className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-full border px-4 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#CF4500] ${
+              walletConnected
+                ? "border-[#151515] bg-[#151515] text-[#F7F3EA] hover:bg-black"
+                : "border-[#151515] bg-white text-[#151515] hover:bg-[#F7F3EA]"
+            }`}
+          >
+            <Wallet className="h-4 w-4" />
+            {walletConnected ? shortWallet : "Connect wallet"}
+          </button>
+        </nav>
+      </header>
 
-        <button
-          onClick={toggleWallet}
-          className={`flex items-center gap-2 px-4 py-1.5 rounded-mcButton text-xs font-semibold tracking-tight transition-all border ${
-            walletConnected 
-              ? "bg-[#141413] border-[#141413] text-[#F3F0EE] hover:bg-black" 
-              : "bg-white border-[#141413] text-[#141413] hover:bg-slate-50"
-          }`}
-        >
-          <Wallet className="h-3.5 w-3.5" />
-          {walletConnected 
-            ? `${walletAddress.substring(0, 6)}...${walletAddress.slice(-4)}`
-            : "Connect Wallet"
-          }
-        </button>
-      </nav>
-
-      {/* Main Container */}
-      <main className="w-full max-w-5xl z-10">
-        
-        {/* Editorial Section Header */}
-        <section className="mt-12 mb-16 text-left max-w-2xl">
-          <div className="flex items-center gap-1.5 text-[#CF4500] mb-3">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#CF4500]" />
-            <span className="text-xs font-bold tracking-widest uppercase">• Stellar Network</span>
+      <main id="dashboard" className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-8 md:px-6 md:py-10">
+        <section className="grid gap-6 lg:grid-cols-[1.04fr_0.96fr] lg:items-end">
+          <div className="max-w-3xl">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-[#D9D2C7] bg-[#F7F3EA] px-3 py-1 text-xs font-bold uppercase tracking-[0.14em] text-[#8B3D19]">
+              <span className="h-2 w-2 rounded-full bg-[#CF4500]" />
+              Stellar testnet
+            </div>
+            <h1 className="text-4xl font-semibold leading-[1.03] tracking-normal text-[#151515] md:text-6xl">
+              Pay-per-request access without the dashboard theater.
+            </h1>
+            <p className="mt-5 max-w-2xl text-base leading-7 text-slate-600 md:text-lg">
+              Run an x402 resource probe, watch the 402 challenge, simulate settlement, and inspect the registry payload from one tight control room.
+            </p>
           </div>
-          <h1 className="text-4xl md:text-5xl font-medium text-[#141413] leading-tight tracking-tight mb-4">
-            A frictionless pay-per-request gateway on Stellar.
-          </h1>
-          <p className="text-slate-600 text-base leading-relaxed font-normal max-w-lg">
-            Interact with on-chain Soroban registry records securely. Payment gates are executed under strict x402 semantic protocols with automatic USDC settlements.
-          </p>
+
+          <div className="grid grid-cols-3 gap-3 rounded-[8px] border border-[#D9D2C7] bg-[#F7F3EA] p-3 shadow-[0_18px_50px_rgba(20,20,19,0.08)]">
+            <Metric icon={Server} label="API route" value="/market-data" />
+            <Metric icon={CircleDollarSign} label="Price" value="0.01 USDC" />
+            <Metric icon={ShieldCheck} label="Phase" value={phaseCopy[phase]} tone={phase} />
+          </div>
         </section>
 
-        {/* Dashboard Grid (Mastercard Editorial Columns) */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          
-          {/* Left: Operations Center (7 Columns) */}
-          <div className="lg:col-span-7 space-y-8">
-            
-            {/* Controller Card - Putty Raised Box (stadium corner radius 40px) */}
-            <div className="bg-[#FCFBFA] rounded-stadium p-8 shadow-cardShadow border border-slate-100 relative overflow-hidden">
-              <div className="flex justify-between items-center mb-6">
+        <PhaseRail phase={phase} phaseIndex={phaseIndex} />
+
+        <section className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(360px,0.9fr)]">
+          <div className="grid gap-6">
+            <section
+              id="controller"
+              className="rounded-[8px] border border-[#D9D2C7] bg-[#FBFAF6] p-5 shadow-[0_18px_50px_rgba(20,20,19,0.08)] md:p-6"
+            >
+              <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                 <div>
-                  <h2 className="text-xl font-medium tracking-tight text-[#141413]">API Query Controller</h2>
-                  <p className="text-xs text-slate-500 mt-1">Select query index targets and execution modes.</p>
+                  <h2 className="text-xl font-semibold tracking-normal">Query controller</h2>
+                  <p className="mt-1 text-sm leading-6 text-slate-600">
+                    Choose a protected resource and run the same path a client agent would negotiate.
+                  </p>
                 </div>
-                <div className="text-xs bg-[#F4F4F4] text-slate-600 px-3 py-1 rounded-pill font-mono border border-slate-200">
-                  stellar:testnet
-                </div>
+                <button
+                  type="button"
+                  onClick={resetSession}
+                  className="inline-flex min-h-10 items-center justify-center gap-2 rounded-full border border-[#D9D2C7] bg-white px-4 text-sm font-semibold text-slate-700 transition hover:border-[#151515] hover:text-[#151515] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#CF4500]"
+                >
+                  <RefreshCcw className="h-4 w-4" />
+                  Reset
+                </button>
               </div>
 
-              {/* Grid Selector */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="report-select" className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Select Premium Resource</label>
+              <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px]">
+                <label className="grid gap-2">
+                  <span className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Premium resource</span>
                   <select
-                    id="report-select"
+                    aria-label="Premium resource"
                     value={selectedReport}
-                    onChange={(e) => {
-                      setSelectedReport(e.target.value);
-                      addLog("info", `Target resource changed: ${e.target.value}`);
+                    onChange={(event) => {
+                      const nextReport = event.target.value as ResourceId;
+                      setSelectedReport(nextReport);
+                      addLog("info", `Target resource changed to ${resources[nextReport].label}.`);
                     }}
-                    className="bg-white border border-slate-200 rounded-mcButton px-4 py-2.5 text-sm text-[#141413] focus:outline-none focus:border-[#141413] transition-colors w-full cursor-pointer shadow-sm"
+                    className="min-h-12 w-full rounded-[8px] border border-[#D9D2C7] bg-white px-4 text-sm font-semibold text-[#151515] outline-none transition focus:border-[#151515] focus:ring-2 focus:ring-[#CF4500]/20"
                   >
-                    <option value="premium_report_2026">USDC Liquidity Analysis (2026)</option>
-                    <option value="telemetry_node_alpha">Node Alpha Diagnostics</option>
-                    <option value="stellar_m2m_insights">M2M Economy Insights</option>
+                    {Object.entries(resources).map(([id, resource]) => (
+                      <option key={id} value={id}>
+                        {resource.label}
+                      </option>
+                    ))}
                   </select>
-                </div>
-                
-                <div className="flex flex-col gap-1.5 justify-end">
-                  <div className="flex items-center gap-2 bg-[#F4F4F4] px-4 py-3 rounded-mcButton border border-slate-200 shadow-sm">
-                    <input 
-                      type="checkbox" 
-                      id="simulate-failure" 
-                      checked={simulateFailure}
-                      onChange={(e) => setSimulateFailure(e.target.checked)}
-                      className="rounded border-slate-300 text-[#CF4500] focus:ring-[#CF4500]/40 bg-white h-4 w-4"
-                    />
-                    <label htmlFor="simulate-failure" className="text-xs font-semibold text-slate-700 cursor-pointer select-none">
-                      Simulate Payment Failure
-                    </label>
-                  </div>
-                </div>
+                  <span className="text-sm leading-6 text-slate-600">{selectedResource.description}</span>
+                </label>
+
+                <label className="flex min-h-12 items-center gap-3 self-start rounded-[8px] border border-[#D9D2C7] bg-[#F1EEE7] px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={simulateFailure}
+                    onChange={(event) => setSimulateFailure(event.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 accent-[#CF4500]"
+                  />
+                  <span className="text-sm font-semibold text-slate-700">Simulate payment failure</span>
+                </label>
               </div>
 
-              {/* Execution Trigger Pill Button */}
-              <button
-                onClick={handleQuery}
-                disabled={isLoading}
-                className={`w-full flex items-center justify-center gap-2 py-3.5 px-6 rounded-pill font-semibold text-sm tracking-tight transition-all shadow-md ${
-                  isLoading 
-                    ? "bg-slate-200 text-slate-500 cursor-not-allowed"
-                    : "bg-[#141413] text-[#F3F0EE] hover:bg-black active:scale-[0.98]"
-                }`}
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="h-4.5 w-4.5 animate-spin" />
-                    Executing x402 Settlement Handshake...
-                  </>
-                ) : (
-                  <>
-                    <Play className="h-4 w-4 fill-current" />
-                    Trigger Gated Query (0.01 USDC)
-                  </>
-                )}
-              </button>
-            </div>
+              <div className="mt-6 grid gap-3 md:grid-cols-[1fr_auto] md:items-center">
+                <button
+                  onClick={handleQuery}
+                  disabled={isLoading}
+                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-[#151515] px-6 text-sm font-bold text-[#F7F3EA] transition hover:bg-black focus:outline-none focus-visible:ring-2 focus-visible:ring-[#CF4500] disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600"
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Executing x402 settlement
+                    </>
+                  ) : (
+                    <>
+                      <Play className="h-4 w-4 fill-current" />
+                      Trigger gated query
+                    </>
+                  )}
+                </button>
+                <div className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600">
+                  {walletConnected ? (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                  ) : (
+                    <Unplug className="h-4 w-4 text-red-600" />
+                  )}
+                  {walletConnected ? "Wallet ready" : "Wallet disconnected"}
+                </div>
+              </div>
+            </section>
 
-            {/* Premium Data Box */}
-            <div className="bg-[#FCFBFA] rounded-stadium p-8 shadow-cardShadow border border-slate-100 min-h-[220px] flex flex-col justify-center">
+            <section
+              id="registry"
+              className="rounded-[8px] border border-[#D9D2C7] bg-[#151515] p-5 text-[#F7F3EA] shadow-[0_18px_50px_rgba(20,20,19,0.12)] md:p-6"
+            >
+              <div className="mb-5 flex items-center justify-between gap-4 border-b border-white/10 pb-4">
+                <div>
+                  <h2 className="text-xl font-semibold tracking-normal">Registry result</h2>
+                  <p className="mt-1 text-sm leading-6 text-white/60">Unlocked payload, IPFS pointer, and market fields.</p>
+                </div>
+                <Database className="h-5 w-5 text-[#F79E1B]" />
+              </div>
+
               {!premiumData && !isLoading && (
-                <div className="flex-1 flex flex-col items-center justify-center text-center p-6 border-2 border-dashed border-slate-200 rounded-stadium">
-                  <div className="bg-slate-100 p-3 rounded-full mb-3">
-                    <XCircle className="h-6 w-6 text-slate-400" />
+                <div className="grid min-h-[220px] place-items-center rounded-[8px] border border-dashed border-white/18 bg-white/[0.03] p-6 text-center">
+                  <div>
+                    <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-full bg-white/8">
+                      <Lock className="h-6 w-6 text-white/50" />
+                    </div>
+                    <p className="font-semibold">Data Registry locked</p>
+                    <p className="mt-2 max-w-md text-sm leading-6 text-white/55">
+                      Run a gated query to complete the 402 payment sequence and unlock the selected record.
+                    </p>
                   </div>
-                  <p className="text-sm font-semibold text-slate-700">Data Registry Locked</p>
-                  <p className="text-xs text-slate-500 mt-1">Payment authorization is required to pull the IPFS register hash.</p>
                 </div>
               )}
 
               {isLoading && (
-                <div className="flex-1 flex flex-col items-center justify-center p-6">
-                  <Loader2 className="h-8 w-8 text-[#141413] animate-spin mb-3" />
-                  <p className="text-sm text-slate-600">Invoking AccessController cross-contract verify...</p>
+                <div className="grid min-h-[220px] place-items-center rounded-[8px] border border-white/10 bg-white/[0.03] p-6 text-center">
+                  <div>
+                    <Loader2 className="mx-auto mb-4 h-9 w-9 animate-spin text-[#F79E1B]" />
+                    <p className="font-semibold">{phaseCopy[phase]}</p>
+                    <p className="mt-2 text-sm leading-6 text-white/55">Coordinating facilitator verification and registry retry.</p>
+                  </div>
                 </div>
               )}
 
               {premiumData && !isLoading && (
-                <div className="flex-1 space-y-4">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                    <div className="flex items-center gap-2">
-                      <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                      <span className="text-xs font-bold text-emerald-700 tracking-wider uppercase">Unlocked Premium Report</span>
+                <div className="grid gap-5">
+                  <div className="rounded-[8px] border border-emerald-400/20 bg-emerald-400/10 p-4">
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <span className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-emerald-200">
+                        <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                        Unlocked Premium Report
+                      </span>
+                      <span className="font-mono text-xs text-white/50">{premiumData.timestamp.substring(11, 19)}</span>
                     </div>
-                    <span className="text-xs text-slate-500 font-mono">{premiumData.timestamp.substring(11, 19)}</span>
+                    <p className="break-all font-mono text-sm text-[#F79E1B]">{premiumData.ipfs}</p>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Unlocked IPFS Register Hash</div>
-                    <div className="bg-[#F4F4F4] px-4 py-3 rounded-mcButton border border-slate-200 font-mono text-xs text-[#CF4500] overflow-x-auto">
-                      {premiumData.ipfs}
-                    </div>
-                  </div>
-
-                  {/* Stat Cards */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-2">
-                    <div className="bg-[#F4F4F4] p-3.5 rounded-mcButton border border-slate-200">
-                      <div className="text-[9px] text-slate-500 uppercase font-bold tracking-wider">Asset</div>
-                      <div className="text-sm font-bold text-[#141413] mt-1">{premiumData.data.asset}</div>
-                    </div>
-                    <div className="bg-[#F4F4F4] p-3.5 rounded-mcButton border border-slate-200">
-                      <div className="text-[9px] text-slate-500 uppercase font-bold tracking-wider">Index Value</div>
-                      <div className="text-sm font-bold text-emerald-600 mt-1">${premiumData.data.price}</div>
-                    </div>
-                    <div className="bg-[#F4F4F4] p-3.5 rounded-mcButton border border-slate-200">
-                      <div className="text-[9px] text-slate-500 uppercase font-bold tracking-wider">24h Volume</div>
-                      <div className="text-sm font-bold text-[#141413] mt-1">${premiumData.data.volume_24h}</div>
-                    </div>
-                    <div className="bg-[#F4F4F4] p-3.5 rounded-mcButton border border-slate-200 flex flex-col justify-between">
-                      <div className="text-[9px] text-slate-500 uppercase font-bold tracking-wider">24h Change</div>
-                      <div className="flex items-center gap-1 text-emerald-600 font-bold text-sm mt-1">
-                        <TrendingUp className="h-3 w-3" />
-                        {premiumData.data.change_24h}
-                      </div>
-                    </div>
+                  <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                    <ResultStat label="Asset" value={premiumData.data.asset} />
+                    <ResultStat label="Index value" value={`$${premiumData.data.price}`} accent />
+                    <ResultStat label="24h volume" value={`$${premiumData.data.volume_24h}`} />
+                    <ResultStat label="24h change" value={premiumData.data.change_24h} accent />
                   </div>
                 </div>
               )}
-            </div>
-
+            </section>
           </div>
 
-          {/* Right: Telemetry logs (5 Columns) */}
-          <div className="lg:col-span-5">
-            <div className="bg-[#FCFBFA] rounded-stadium p-6 shadow-cardShadow border border-slate-100 h-[526px] flex flex-col">
-              <h2 className="text-md font-bold mb-4 flex items-center gap-2 text-[#141413]">
-                <TerminalIcon className="h-4 w-4 text-[#CF4500]" />
-                Handshake Telemetry & Logs
-              </h2>
-
-              <div className="flex-1 overflow-y-auto space-y-3 font-mono text-xs pr-1">
-                {logs.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center text-center text-slate-400">
-                    <p>No telemetry recorded.</p>
-                  </div>
-                ) : (
-                  logs.map((log) => (
-                    <div 
-                      key={log.id} 
-                      className={`p-3 rounded-mcButton border leading-relaxed ${
-                        log.type === "success"
-                          ? "bg-emerald-50 border-emerald-100 text-emerald-800"
-                          : log.type === "error"
-                          ? "bg-[#CF4500]/5 border-[#CF4500]/10 text-[#CF4500]"
-                          : log.type === "warn"
-                          ? "bg-amber-50 border-amber-100 text-amber-800"
-                          : "bg-[#F4F4F4] border-slate-200 text-slate-600"
-                      }`}
-                    >
-                      <div className="flex justify-between text-[9px] text-slate-400 mb-1">
-                        <span className="font-bold">{log.type.toUpperCase()}</span>
-                        <span>{log.timestamp}</span>
-                      </div>
-                      <div>{log.message}</div>
-                    </div>
-                  ))
-                )}
+          <aside
+            id="telemetry"
+            className="rounded-[8px] border border-[#D9D2C7] bg-[#FBFAF6] p-5 shadow-[0_18px_50px_rgba(20,20,19,0.08)] md:p-6 lg:sticky lg:top-24"
+          >
+            <div className="mb-5 flex items-center justify-between gap-4">
+              <div>
+                <h2 className="flex items-center gap-2 text-xl font-semibold tracking-normal">
+                  <TerminalIcon className="h-5 w-5 text-[#CF4500]" />
+                  Telemetry
+                </h2>
+                <p className="mt-1 text-sm text-slate-600">Latest handshake events first.</p>
               </div>
+              <span className="rounded-full border border-[#D9D2C7] bg-white px-3 py-1 font-mono text-xs text-slate-500">
+                {logs.length} logs
+              </span>
             </div>
-          </div>
 
-        </div>
+            <div className="max-h-[580px] space-y-3 overflow-y-auto pr-1">
+              {logs.length === 0 ? (
+                <div className="grid min-h-[260px] place-items-center rounded-[8px] border border-dashed border-[#D9D2C7] text-center text-sm text-slate-500">
+                  No telemetry recorded.
+                </div>
+              ) : (
+                logs.map((log) => <LogLine key={log.id} log={log} />)
+              )}
+            </div>
+          </aside>
+        </section>
 
+        <section className="grid gap-4 rounded-[8px] border border-[#D9D2C7] bg-[#F7F3EA] p-5 md:grid-cols-3 md:p-6">
+          <Step title="1. Probe" text="The client asks for /api/market-data without payment proof." />
+          <Step title="2. Settle" text="The x402 challenge defines the exact Stellar testnet USDC payment." />
+          <Step title="3. Unlock" text="The client retries with proof and receives the registry payload." />
+        </section>
       </main>
 
-      {/* Decorative MasterCard Trace Circles - Signature Element */}
-      <div className="mt-28 flex flex-col items-center justify-center gap-4 text-center">
-        {/* Orbital Arc Connection */}
-        <div className="relative w-48 h-20 flex justify-center items-center">
-          <svg className="absolute w-full h-full text-[#F37338]" fill="none" viewBox="0 0 200 100">
-            <path d="M 10,80 Q 100,0 190,80" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 3" />
-          </svg>
-          <div className="absolute left-6 bottom-1 w-12 h-12 rounded-full bg-[#FCFBFA] border border-slate-200 flex items-center justify-center shadow-sm">
-            <div className="w-8 h-8 rounded-full bg-[#EB001B] opacity-80" />
+      <footer className="border-t border-[#2C2A27] bg-[#151515] px-4 py-8 text-[#F7F3EA] md:px-6">
+        <div className="mx-auto flex max-w-6xl flex-col gap-4 text-sm md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-2 font-semibold">
+            <ShieldCheck className="h-4 w-4 text-[#F79E1B]" />
+            x402 Stellar testnet console
           </div>
-          <div className="absolute right-6 bottom-1 w-12 h-12 rounded-full bg-[#FCFBFA] border border-slate-200 flex items-center justify-center shadow-sm">
-            <div className="w-8 h-8 rounded-full bg-[#F79E1B] opacity-80" />
-          </div>
-          {/* Satellite Button */}
-          <div className="absolute -bottom-2 right-2 w-7 h-7 rounded-full bg-white border border-slate-200 flex items-center justify-center shadow-md cursor-pointer hover:bg-slate-50 transition-colors">
-            <ArrowRight className="h-3.5 w-3.5 text-[#141413]" />
-          </div>
-        </div>
-        <div>
-          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Priceless Trajectory</span>
-          <p className="text-xs text-slate-500 mt-1 max-w-xs">Connecting Soroban smart registries through verified trust networks.</p>
-        </div>
-      </div>
-
-      {/* Dark Footer */}
-      <footer className="absolute bottom-0 left-0 right-0 bg-[#141413] text-[#F3F0EE] py-12 px-6 border-t border-slate-900">
-        <div className="max-w-5xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4 text-xs">
-          <div className="flex items-center gap-2">
-            <div className="flex -space-x-1.5">
-              <div className="w-3.5 h-3.5 rounded-full bg-[#EB001B]" />
-              <div className="w-3.5 h-3.5 rounded-full bg-[#F79E1B] opacity-85" />
-            </div>
-            <span className="font-semibold">Stellar x402 Gateway</span>
-          </div>
-          <div className="flex gap-6 text-slate-400">
+          <div className="flex flex-wrap gap-x-5 gap-y-2 text-white/55">
             <span>Passphrase: Testnet</span>
-            <span>USDC Issuer: GBBD47IF...</span>
+            <span>USDC issuer: GBBD47IF...</span>
             <span>Facilitator: OpenZeppelin</span>
           </div>
         </div>
       </footer>
+    </div>
+  );
+}
 
+function PhaseRail({ phase, phaseIndex }: { phase: QueryPhase; phaseIndex: number }) {
+  return (
+    <section
+      aria-label="x402 handshake progress"
+      className="grid gap-3 rounded-[8px] border border-[#D9D2C7] bg-[#FBFAF6] p-3 shadow-[0_18px_50px_rgba(20,20,19,0.06)] md:grid-cols-5"
+    >
+      {phaseSteps.map((step, index) => {
+        const isComplete = phase === "complete" || (phaseIndex > -1 && index < phaseIndex);
+        const isCurrent = step.id === phase;
+        const isFailed = phase === "failed" && index === 2;
+
+        return (
+          <div
+            key={step.id}
+            className={`rounded-[8px] border p-3 ${
+              isCurrent || isFailed
+                ? "border-[#CF4500] bg-[#FFF5EE]"
+                : isComplete
+                  ? "border-emerald-200 bg-emerald-50"
+                  : "border-[#E5DED2] bg-white"
+            }`}
+          >
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">{step.label}</span>
+              <span
+                className={`h-2.5 w-2.5 rounded-full ${
+                  isFailed ? "bg-red-500" : isCurrent ? "bg-[#CF4500]" : isComplete ? "bg-emerald-500" : "bg-slate-300"
+                }`}
+              />
+            </div>
+            <p className="text-sm font-semibold text-[#151515]">{step.detail}</p>
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
+function Metric({
+  icon: Icon,
+  label,
+  value,
+  tone,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: string;
+  tone?: QueryPhase;
+}) {
+  const toneClass =
+    tone === "complete"
+      ? "text-emerald-700"
+      : tone === "failed"
+        ? "text-red-700"
+        : tone && tone !== "idle"
+          ? "text-[#8B3D19]"
+          : "text-[#151515]";
+
+  return (
+    <div className="min-w-0 rounded-[8px] border border-[#D9D2C7] bg-white p-3">
+      <Icon className="mb-3 h-4 w-4 text-[#CF4500]" />
+      <div className="truncate text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">{label}</div>
+      <div className={`mt-1 truncate text-sm font-bold ${toneClass}`}>{value}</div>
+    </div>
+  );
+}
+
+function ResultStat({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <div className="rounded-[8px] border border-white/10 bg-white/[0.04] p-4">
+      <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/45">{label}</div>
+      <div className={`mt-2 text-sm font-bold ${accent ? "text-emerald-300" : "text-[#F7F3EA]"}`}>{value}</div>
+    </div>
+  );
+}
+
+function LogLine({ log }: { log: TelemetryLog }) {
+  const styles: Record<LogType, string> = {
+    success: "border-emerald-200 bg-emerald-50 text-emerald-900",
+    error: "border-red-200 bg-red-50 text-red-900",
+    warn: "border-amber-200 bg-amber-50 text-amber-900",
+    info: "border-[#D9D2C7] bg-white text-slate-700",
+  };
+
+  const icons: Record<LogType, React.ReactNode> = {
+    success: <CheckCircle2 className="h-4 w-4 text-emerald-600" />,
+    error: <XCircle className="h-4 w-4 text-red-600" />,
+    warn: <AlertTriangle className="h-4 w-4 text-amber-600" />,
+    info: <Activity className="h-4 w-4 text-[#3860BE]" />,
+  };
+
+  return (
+    <div className={`rounded-[8px] border p-3 ${styles[log.type]}`}>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <span className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.14em]">
+          {icons[log.type]}
+          {log.type}
+        </span>
+        <span className="font-mono text-[11px] opacity-60">{log.timestamp}</span>
+      </div>
+      <p className="text-sm leading-6">{log.message}</p>
+    </div>
+  );
+}
+
+function Step({ title, text }: { title: string; text: string }) {
+  return (
+    <div className="flex gap-3">
+      <div className="mt-1 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#151515] text-[#F7F3EA]">
+        <ArrowRight className="h-4 w-4" />
+      </div>
+      <div>
+        <h3 className="font-semibold">{title}</h3>
+        <p className="mt-1 text-sm leading-6 text-slate-600">{text}</p>
+      </div>
     </div>
   );
 }

@@ -1,47 +1,115 @@
 import React from "react";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import Home from "../pages/index";
 
+const mockFetch = jest.fn();
+
+async function advanceQueryTimers() {
+  for (let index = 0; index < 12; index += 1) {
+    await act(async () => {
+      jest.advanceTimersByTime(500);
+      await Promise.resolve();
+    });
+  }
+}
+
 describe("Stellar x402 Gateway Dashboard", () => {
-  it("renders correctly, displaying the gateway header, query button, and status", () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    mockFetch.mockResolvedValue({ ok: false, status: 402 });
+    globalThis.fetch = mockFetch as unknown as typeof fetch;
+  });
+
+  afterEach(() => {
+    act(() => {
+      jest.runOnlyPendingTimers();
+    });
+    jest.useRealTimers();
+    jest.clearAllMocks();
+  });
+
+  it("renders the redesigned control surface", () => {
     render(<Home />);
-    
-    // Assertion 1: Header title is rendered
+
     expect(screen.getByText("Stellar x402 Gateway")).toBeInTheDocument();
-    
-    // Assertion 2: Query trigger button is rendered
-    expect(screen.getByRole("button", { name: /Trigger Gated Query/i })).toBeInTheDocument();
-    
-    // Assertion 3: Wallet connection status is shown
-    expect(screen.getByRole("button", { name: /GBMXRW/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /pay-per-request access without the dashboard theater/i })
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /trigger gated query/i })).toBeInTheDocument();
+    expect(screen.getByText("Data Registry locked")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: /x402 handshake progress/i })).toBeInTheDocument();
   });
 
-  it("toggles wallet connection state when connect/disconnect button is clicked", () => {
+  it("blocks a query when the wallet is disconnected", () => {
     render(<Home />);
-    
-    const toggleButton = screen.getByRole("button", { name: /GBMXRW/i });
-    fireEvent.click(toggleButton);
 
-    // Assertion 4: Button label changes to prompt wallet connection
-    expect(screen.getByRole("button", { name: /Connect Wallet/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /GBMXRW/i }));
+    fireEvent.click(screen.getByRole("button", { name: /trigger gated query/i }));
+
+    expect(screen.getByRole("button", { name: /connect wallet/i })).toBeInTheDocument();
+    expect(screen.getByText("Wallet disconnected")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Connect your wallet before running a gated query."
+    );
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it("handles premium query trigger and transitions through loading states", async () => {
+  it("unlocks the selected premium resource after the simulated x402 flow", async () => {
     render(<Home />);
-    
-    const queryButton = screen.getByRole("button", { name: /Trigger Gated Query/i });
-    fireEvent.click(queryButton);
 
-    // Assertion 5: Loading text is visible immediately upon trigger
-    expect(screen.getByText(/Executing x402 Settlement/i)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Premium resource"), {
+      target: { value: "telemetry_node_alpha" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /trigger gated query/i }));
 
-    // Wait for the async simulation sequence to complete (transitions back to normal button)
+    expect(screen.getByText("Executing x402 settlement")).toBeInTheDocument();
+
+    await advanceQueryTimers();
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      "/api/market-data",
+      expect.objectContaining({
+        method: "GET",
+        headers: { Accept: "application/json" },
+      })
+    );
     await waitFor(() => {
-      expect(screen.queryByText(/Executing x402 Settlement/i)).not.toBeInTheDocument();
-    }, { timeout: 6000 });
+      expect(screen.getByText("Unlocked Premium Report")).toBeInTheDocument();
+    });
+    expect(screen.getByText("ipfs://QmNodeAlphaDiagnostics11235")).toBeInTheDocument();
+    expect(
+      screen.getByText("Node Alpha Diagnostics unlocked from the DataRegistry contract.")
+    ).toBeInTheDocument();
+  });
 
-    // Assertion 6: Premium unlocked data is visible in the container
-    expect(screen.getByText(/Unlocked Premium Report/i)).toBeInTheDocument();
+  it("shows the failure state without unlocking registry data", async () => {
+    render(<Home />);
+
+    fireEvent.click(screen.getByLabelText("Simulate payment failure"));
+    fireEvent.click(screen.getByRole("button", { name: /trigger gated query/i }));
+
+    await advanceQueryTimers();
+
+    await waitFor(() => {
+      expect(screen.getByText("Payment failed. Add testnet USDC or disable failure mode.")).toBeInTheDocument();
+    });
+    expect(screen.getAllByText("Failed").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Unlocked Premium Report")).not.toBeInTheDocument();
+  });
+
+  it("clears unlocked data and telemetry when reset is clicked", async () => {
+    render(<Home />);
+
+    fireEvent.click(screen.getByRole("button", { name: /trigger gated query/i }));
+    await advanceQueryTimers();
+    await waitFor(() => {
+      expect(screen.getByText("Unlocked Premium Report")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /reset/i }));
+
+    expect(screen.getByText("Data Registry locked")).toBeInTheDocument();
+    expect(screen.getByText("No telemetry recorded.")).toBeInTheDocument();
   });
 });

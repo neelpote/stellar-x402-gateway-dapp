@@ -2,7 +2,7 @@
 
 **Live Demo:** [stellar-x402-gateway-dapp.vercel.app](https://stellar-x402-gateway-dapp.vercel.app)
 
-[![CI/CD Pipeline](https://github.com/stellar-x402-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/)
+[![CI/CD Pipeline](https://github.com/neelpote/x402payments/actions/workflows/ci.yml/badge.svg)](https://github.com/neelpote/x402payments/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Soroban SDK Version](https://img.shields.io/badge/Soroban%20SDK-21.7.7-blue)](https://crates.io/crates/soroban-sdk)
 [![Next.js Pages Router](https://img.shields.io/badge/Next.js-14.2.35-black)](https://nextjs.org/)

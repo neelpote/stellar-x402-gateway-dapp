@@ -35,12 +35,12 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             contracts/target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('contracts/Cargo.toml') }}
+          key: ${{ runner.os }}-cargo-${{ hashFiles('contracts/Cargo.toml', 'contracts/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
 
       - name: Run Soroban contract tests
-        run: cargo test --manifest-path contracts/Cargo.toml
+        run: cargo test --manifest-path contracts/Cargo.toml --locked
 
       - name: Run TypeScript & Jest tests
         run: npm run test

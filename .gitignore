@@ -16,7 +16,7 @@ out/
 
 # Rust Build Artifacts
 target/
-Cargo.lock
+/Cargo.lock
 
 # IDE settings
 .vscode/

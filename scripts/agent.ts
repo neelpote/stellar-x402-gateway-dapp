@@ -43,7 +43,8 @@ async function main() {
     // Wrap native fetch function using wrapFetchWithPayment
     const fetchWithPayment = wrapFetchWithPayment(fetch, client);
 
-    const targetUrl = "http://localhost:3000/api/market-data";
+    const gatewayBaseUrl = process.env.GATEWAY_BASE_URL ?? "http://127.0.0.1:3000";
+    const targetUrl = `${gatewayBaseUrl.replace(/\/$/, "")}/api/market-data`;
     console.log(`Sending authenticated pay-per-call GET request to: ${targetUrl} (USDC stellar:testnet)`);
 
     const response = await fetchWithPayment(targetUrl, {

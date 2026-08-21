@@ -8,6 +8,7 @@ A Next.js example of an HTTP `402 Payment Required` gateway on Stellar testnet, 
 
 - Dashboard: [stellar-x402-gateway-dapp.vercel.app](https://stellar-x402-gateway-dapp.vercel.app)
 - Uptime health check: [api/health](https://stellar-x402-gateway-dapp.vercel.app/api/health)
+- Demo walkthrough: [MP4 recording](docs/demo/stellar-x402-gateway-walkthrough.mp4)
 - DataRegistry: [`CBNK...DDHAO`](https://stellar.expert/explorer/testnet/contract/CBNKLZ5OTWONHLNGFE274SFCVUEDOTLSCKQE3DCO3KESHOF7O4DDDHAO)
 - AccessController: [`CB2L...K7RYH`](https://stellar.expert/explorer/testnet/contract/CB2LLC37XM3AMQOYWMML6R6HHBFKIMYUNC4LTK5AIJ2244ALGSGK7RYH)
 
@@ -93,6 +94,8 @@ Run the real signed x402 client after configuring and funding the agent account:
 ```bash
 npm run test:agent
 ```
+
+Both command-line clients default to `http://127.0.0.1:3000`, which avoids a local IPv6 `localhost` mismatch. Set `GATEWAY_BASE_URL` to point them at a deployed gateway instead.
 
 The setup helper creates fresh testnet accounts and trustlines. It stores the buyer secret in the permission-restricted `.env.local` file and does not print secrets:
 

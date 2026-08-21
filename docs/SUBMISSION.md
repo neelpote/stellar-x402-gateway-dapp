@@ -7,7 +7,7 @@
 - Health check: https://stellar-x402-gateway-dapp.vercel.app/api/health
 - DataRegistry: https://stellar.expert/explorer/testnet/contract/CBNKLZ5OTWONHLNGFE274SFCVUEDOTLSCKQE3DCO3KESHOF7O4DDDHAO
 - AccessController: https://stellar.expert/explorer/testnet/contract/CB2LLC37XM3AMQOYWMML6R6HHBFKIMYUNC4LTK5AIJ2244ALGSGK7RYH
-- Demo video: `DEMO_VIDEO_URL` (upload the recording described in `DEMO_SCRIPT.md`)
+- Demo video: [production dashboard walkthrough](https://github.com/neelpote/stellar-x402-gateway-dapp/blob/main/docs/demo/stellar-x402-gateway-walkthrough.mp4)
 
 ## Evidence
 
@@ -18,7 +18,9 @@
 | Live deployment | Vercel URL above |
 | Stellar testnet contracts | Explorer links above |
 | Product and mobile UI | `docs/screenshots/dashboard-desktop.png` and `docs/screenshots/dashboard-mobile.png` |
+| Demo video | `docs/demo/stellar-x402-gateway-walkthrough.mp4` shows resource selection, the real 402 challenge, simulated settlement, unlock, and failure UI states on the live deployment |
 | Analytics and monitoring | Vercel Web Analytics, Speed Insights, and `/api/health` |
+| Raw payment gate | `npm run test:bounce` was verified against `http://127.0.0.1:3000` and received HTTP 402 with `PAYMENT-REQUIRED` |
 | Documentation | `README.md`, `.env.example`, and `docs/DEMO_SCRIPT.md` |
 
 ## Feedback Summary
@@ -40,4 +42,4 @@ npm run build
 curl -i https://stellar-x402-gateway-dapp.vercel.app/api/health
 ```
 
-After deploying, visit Vercel and enable Web Analytics and Speed Insights for the project. Record the walkthrough in `docs/DEMO_SCRIPT.md`, paste its public link above, and fill in the review feedback table.
+After deploying, visit Vercel and enable Web Analytics and Speed Insights for the project. The dashboard video is included in this repository; use `docs/DEMO_SCRIPT.md` for a longer narrated recording that also includes the real signed agent path. Fill in the review feedback table only with feedback that has actually been collected.

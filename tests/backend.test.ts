@@ -28,7 +28,15 @@ jest.mock("@x402/stellar/exact/server", () => {
   };
 });
 
-import handler, { buildMarketDataPayload, config, marketDataConfigError } from "@/pages/api/market-data";
+import handler, {
+  buildMarketDataPayload,
+  config,
+  isValidPaymentRecipientAddress,
+  marketDataConfigError,
+  resetMarketDataAppForTests,
+  X402_PRICE,
+} from "@/pages/api/market-data";
+import healthHandler from "@/pages/api/health";
 
 function createJsonResponse() {
   const response = {
@@ -85,7 +93,7 @@ describe("Market Data API Route Configuration", () => {
       expect.objectContaining({
         success: true,
         asset: "USDC",
-        price: "1.00",
+        price: X402_PRICE,
         chain: "stellar:testnet",
         recipient: "GTESTRECIPIENT",
       })
@@ -96,7 +104,90 @@ describe("Market Data API Route Configuration", () => {
   it("should expose a specific payload for missing payment recipient configuration", () => {
     expect(marketDataConfigError()).toEqual({
       success: false,
-      error: "Server configuration error: PAYMENT_RECIPIENT_ADDRESS is not defined in the environment.",
+      error: "Server configuration error: PAYMENT_RECIPIENT_ADDRESS must be a valid Stellar account address.",
     });
+  });
+
+  it("validates Stellar recipient addresses before configuring payment middleware", () => {
+    expect(
+      isValidPaymentRecipientAddress("GBMXRWVHM4JA3VPIB7BT25WMEKJQX4OXCWT5BZZGQWKLACUFKETZZ6CF")
+    ).toBe(true);
+    expect(isValidPaymentRecipientAddress("GBPLACEHOLDERRECIPIENTADDRESS1234567890")).toBe(false);
+    expect(isValidPaymentRecipientAddress(undefined)).toBe(false);
+  });
+
+  it("fails closed when the payment recipient is missing", () => {
+    const originalRecipient = process.env.PAYMENT_RECIPIENT_ADDRESS;
+    delete process.env.PAYMENT_RECIPIENT_ADDRESS;
+    resetMarketDataAppForTests();
+    const response = createJsonResponse();
+
+    handler({ method: "GET" } as any, response as any);
+
+    expect(response.status).toHaveBeenCalledWith(500);
+    expect(response.payload).toEqual(marketDataConfigError());
+    if (originalRecipient) {
+      process.env.PAYMENT_RECIPIENT_ADDRESS = originalRecipient;
+    }
+    resetMarketDataAppForTests();
+  });
+});
+
+describe("Health API Route", () => {
+  const originalRecipient = process.env.PAYMENT_RECIPIENT_ADDRESS;
+  const originalFacilitatorKey = process.env.FACILITATOR_API_KEY;
+
+  afterEach(() => {
+    if (originalRecipient) {
+      process.env.PAYMENT_RECIPIENT_ADDRESS = originalRecipient;
+    } else {
+      delete process.env.PAYMENT_RECIPIENT_ADDRESS;
+    }
+
+    if (originalFacilitatorKey) {
+      process.env.FACILITATOR_API_KEY = originalFacilitatorKey;
+    } else {
+      delete process.env.FACILITATOR_API_KEY;
+    }
+  });
+
+  it("reports ready only when the gateway configuration is present", () => {
+    process.env.PAYMENT_RECIPIENT_ADDRESS = "GBMXRWVHM4JA3VPIB7BT25WMEKJQX4OXCWT5BZZGQWKLACUFKETZZ6CF";
+    process.env.FACILITATOR_API_KEY = "test-key";
+    const response = createJsonResponse();
+
+    healthHandler({ method: "GET" } as any, response as any);
+
+    expect(response.status).toHaveBeenCalledWith(200);
+    expect(response.headers["Cache-Control"]).toBe("no-store, max-age=0");
+    expect(response.payload).toEqual(
+      expect.objectContaining({
+        status: "ok",
+        service: "stellar-x402-gateway",
+        checks: {
+          paymentRecipientConfigured: true,
+          facilitatorConfigured: true,
+        },
+      })
+    );
+  });
+
+  it("returns a degraded signal when the payment service is not configured", () => {
+    delete process.env.PAYMENT_RECIPIENT_ADDRESS;
+    delete process.env.FACILITATOR_API_KEY;
+    const response = createJsonResponse();
+
+    healthHandler({ method: "GET" } as any, response as any);
+
+    expect(response.status).toHaveBeenCalledWith(503);
+    expect(response.payload).toEqual(
+      expect.objectContaining({
+        status: "degraded",
+        checks: {
+          paymentRecipientConfigured: false,
+          facilitatorConfigured: false,
+        },
+      })
+    );
   });
 });

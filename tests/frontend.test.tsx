@@ -37,7 +37,7 @@ describe("Stellar x402 Gateway Dashboard", () => {
       screen.getByRole("heading", { name: /pay-per-request access without the dashboard theater/i })
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /trigger gated query/i })).toBeInTheDocument();
-    expect(screen.getByText("Data Registry locked")).toBeInTheDocument();
+    expect(screen.getByText("Premium resource locked")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: /x402 handshake progress/i })).toBeInTheDocument();
   });
 
@@ -63,7 +63,7 @@ describe("Stellar x402 Gateway Dashboard", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /trigger gated query/i }));
 
-    expect(screen.getByText("Executing x402 settlement")).toBeInTheDocument();
+    expect(screen.getByText("Simulating x402 settlement")).toBeInTheDocument();
 
     await advanceQueryTimers();
 
@@ -79,7 +79,7 @@ describe("Stellar x402 Gateway Dashboard", () => {
     });
     expect(screen.getByText("ipfs://QmNodeAlphaDiagnostics11235")).toBeInTheDocument();
     expect(
-      screen.getByText("Node Alpha Diagnostics unlocked from the DataRegistry contract.")
+      screen.getByText("Node Alpha Diagnostics unlocked in this dashboard simulation.")
     ).toBeInTheDocument();
   });
 
@@ -109,7 +109,7 @@ describe("Stellar x402 Gateway Dashboard", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /reset/i }));
 
-    expect(screen.getByText("Data Registry locked")).toBeInTheDocument();
+    expect(screen.getByText("Premium resource locked")).toBeInTheDocument();
     expect(screen.getByText("No telemetry recorded.")).toBeInTheDocument();
   });
 });

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Head from "next/head";
+import { track } from "@vercel/analytics";
 import {
   Activity,
   AlertTriangle,
@@ -72,7 +73,7 @@ const phaseSteps: Array<{ id: QueryPhase; label: string; detail: string }> = [
   { id: "challenge", label: "Challenge", detail: "Receive HTTP 402" },
   { id: "settlement", label: "Settle", detail: "Sign Stellar payment" },
   { id: "retry", label: "Retry", detail: "Attach payment proof" },
-  { id: "complete", label: "Unlock", detail: "Return registry data" },
+  { id: "complete", label: "Unlock", detail: "Return paid data" },
 ];
 
 type ResourceId = keyof typeof resources;
@@ -137,6 +138,7 @@ export default function Home() {
   useEffect(() => {
     addLog("info", "Resource server online at /api/market-data.");
     addLog("info", "OpenZeppelin facilitator channel configured for stellar:testnet.");
+    track("gateway_dashboard_opened");
   }, []);
 
   const probeProtectedResource = async () => {
@@ -179,6 +181,7 @@ export default function Home() {
 
   const handleQuery = async () => {
     if (!walletConnected) {
+      track("gated_query_blocked", { reason: "wallet_disconnected" });
       triggerToast("error", "Connect your wallet before running a gated query.");
       addLog("error", "Query blocked because no wallet is connected.");
       return;
@@ -186,6 +189,7 @@ export default function Home() {
 
     setIsLoading(true);
     setPremiumData(null);
+    track("gated_query_started", { resource: selectedReport });
 
     await probeProtectedResource();
     await wait(500);
@@ -193,11 +197,12 @@ export default function Home() {
     setPhase("settlement");
     addLog("info", "Preparing 0.01 USDC exact payment on stellar:testnet.");
     await wait(600);
-    addLog("info", "Requesting wallet signature for settlement transaction.");
+    addLog("info", "Simulating a wallet signature for the dashboard walkthrough.");
     await wait(700);
 
     if (simulateFailure) {
       setPhase("failed");
+      track("gated_query_failed", { resource: selectedReport, reason: "simulated_insufficient_balance" });
       addLog("error", "Transaction rejected: simulated insufficient USDC testnet balance.");
       triggerToast("error", "Payment failed. Add testnet USDC or disable failure mode.");
       setIsLoading(false);
@@ -206,7 +211,7 @@ export default function Home() {
 
     addLog(
       "success",
-      "Transaction signed. Hash 5b45bfe2c55448e16b65a108aa49232d25190a5c9dc72ac5952b423b5154d8c7."
+      "Simulated transaction signed. No on-chain payment is submitted by this browser walkthrough."
     );
     await wait(650);
 
@@ -220,7 +225,7 @@ export default function Home() {
       ipfs: selectedResource.ipfs,
       data: {
         asset: "USDC",
-        price: "1.00",
+        price: "0.01",
         volume_24h: "54,201,948",
         change_24h: "+0.02%",
         recipient: "GAAJFP5Q4U76HQXINWVS7STDQP75VLJIRDLY2MAOQ5A3BZ73QZ6NR7PI",
@@ -229,14 +234,16 @@ export default function Home() {
 
     setPremiumData(mockData);
     setPhase("complete");
-    addLog("success", `${selectedResource.label} unlocked from the DataRegistry contract.`);
-    triggerToast("success", "Premium registry unlocked.");
+    track("gated_query_completed", { resource: selectedReport, mode: "walkthrough" });
+    addLog("success", `${selectedResource.label} unlocked in this dashboard simulation.`);
+    triggerToast("success", "Payment walkthrough complete.");
     setIsLoading(false);
   };
 
   const toggleWallet = () => {
     setWalletConnected((current) => {
       const nextValue = !current;
+      track("wallet_connection_changed", { connected: nextValue });
       addLog("info", nextValue ? `Wallet connected: ${shortWallet}` : "Wallet disconnected.");
       triggerToast("info", nextValue ? "Wallet connected" : "Wallet disconnected");
       return nextValue;
@@ -247,6 +254,7 @@ export default function Home() {
     setPremiumData(null);
     setPhase("idle");
     setLogs([]);
+    track("gateway_session_reset");
     triggerToast("info", "Session cleared");
   };
 
@@ -332,7 +340,7 @@ export default function Home() {
               Pay-per-request access without the dashboard theater.
             </h1>
             <p className="mt-5 max-w-2xl text-base leading-7 text-slate-600 md:text-lg">
-              Run an x402 resource probe, watch the 402 challenge, simulate settlement, and inspect the registry payload from one tight control room.
+              Run a real x402 resource probe, watch the 402 challenge, and simulate the wallet settlement UI from one tight control room.
             </p>
           </div>
 
@@ -377,6 +385,7 @@ export default function Home() {
                     onChange={(event) => {
                       const nextReport = event.target.value as ResourceId;
                       setSelectedReport(nextReport);
+                      track("resource_selected", { resource: nextReport });
                       addLog("info", `Target resource changed to ${resources[nextReport].label}.`);
                     }}
                     className="min-h-12 w-full rounded-[8px] border border-[#D9D2C7] bg-white px-4 text-sm font-semibold text-[#151515] outline-none transition focus:border-[#151515] focus:ring-2 focus:ring-[#CF4500]/20"
@@ -410,7 +419,7 @@ export default function Home() {
                   {isLoading ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Executing x402 settlement
+                      Simulating x402 settlement
                     </>
                   ) : (
                     <>
@@ -437,7 +446,7 @@ export default function Home() {
               <div className="mb-5 flex items-center justify-between gap-4 border-b border-white/10 pb-4">
                 <div>
                   <h2 className="text-xl font-semibold tracking-normal">Registry result</h2>
-                  <p className="mt-1 text-sm leading-6 text-white/60">Unlocked payload, IPFS pointer, and market fields.</p>
+                  <p className="mt-1 text-sm leading-6 text-white/60">Simulated paid payload, content reference, and market fields.</p>
                 </div>
                 <Database className="h-5 w-5 text-[#F79E1B]" />
               </div>
@@ -448,7 +457,7 @@ export default function Home() {
                     <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-full bg-white/8">
                       <Lock className="h-6 w-6 text-white/50" />
                     </div>
-                    <p className="font-semibold">Data Registry locked</p>
+                    <p className="font-semibold">Premium resource locked</p>
                     <p className="mt-2 max-w-md text-sm leading-6 text-white/55">
                       Run a gated query to complete the 402 payment sequence and unlock the selected record.
                     </p>
@@ -461,7 +470,7 @@ export default function Home() {
                   <div>
                     <Loader2 className="mx-auto mb-4 h-9 w-9 animate-spin text-[#F79E1B]" />
                     <p className="font-semibold">{phaseCopy[phase]}</p>
-                    <p className="mt-2 text-sm leading-6 text-white/55">Coordinating facilitator verification and registry retry.</p>
+                    <p className="mt-2 text-sm leading-6 text-white/55">Walking through facilitator verification and the paid retry.</p>
                   </div>
                 </div>
               )}
@@ -522,7 +531,7 @@ export default function Home() {
         <section className="grid gap-4 rounded-[8px] border border-[#D9D2C7] bg-[#F7F3EA] p-5 md:grid-cols-3 md:p-6">
           <Step title="1. Probe" text="The client asks for /api/market-data without payment proof." />
           <Step title="2. Settle" text="The x402 challenge defines the exact Stellar testnet USDC payment." />
-          <Step title="3. Unlock" text="The client retries with proof and receives the registry payload." />
+          <Step title="3. Unlock" text="A real paying client retries with proof and receives the protected payload." />
         </section>
       </main>
 

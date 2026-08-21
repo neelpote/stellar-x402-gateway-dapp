@@ -1,0 +1,11 @@
+# Local build products and developer-only files do not belong in the web bundle.
+node_modules/
+.next/
+.swc/
+contracts/target/
+contracts/test_snapshots/
+.env*
+.git/
+.github/
+docs/
+coverage/

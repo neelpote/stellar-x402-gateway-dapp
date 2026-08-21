@@ -2,18 +2,20 @@ import express from "express";
 import { paymentMiddleware, x402ResourceServer } from "@x402/express";
 import { HTTPFacilitatorClient } from "@x402/core/server";
 import { ExactStellarScheme } from "@x402/stellar/exact/server";
+import { StrKey } from "@stellar/stellar-sdk";
 import type { NextApiRequest, NextApiResponse } from "next";
 
 type ExpressApp = ReturnType<typeof express>;
 
 let app: ExpressApp | null = null;
+export const X402_PRICE = "0.01";
 
 export function buildMarketDataPayload(recipient: string) {
   return {
     success: true,
     timestamp: new Date().toISOString(),
     asset: "USDC",
-    price: "1.00",
+    price: X402_PRICE,
     volume_24h: "54201948",
     change_24h: "+0.02%",
     chain: "stellar:testnet",
@@ -25,12 +27,17 @@ export function buildMarketDataPayload(recipient: string) {
 export function marketDataConfigError() {
   return {
     success: false,
-    error: "Server configuration error: PAYMENT_RECIPIENT_ADDRESS is not defined in the environment.",
+    error: "Server configuration error: PAYMENT_RECIPIENT_ADDRESS must be a valid Stellar account address.",
   };
 }
 
+export function isValidPaymentRecipientAddress(value: string | undefined): value is string {
+  return typeof value === "string" && StrKey.isValidEd25519PublicKey(value.trim());
+}
+
 function getPaymentRecipientAddress() {
-  return process.env.PAYMENT_RECIPIENT_ADDRESS;
+  const value = process.env.PAYMENT_RECIPIENT_ADDRESS;
+  return isValidPaymentRecipientAddress(value) ? value.trim() : undefined;
 }
 
 function getAuthHeaders(): Record<string, string> {
@@ -46,6 +53,9 @@ function getAuthHeaders(): Record<string, string> {
 function createApp() {
   const expressApp = express();
   const recipientAddress = getPaymentRecipientAddress();
+  if (!recipientAddress) {
+    throw new Error(marketDataConfigError().error);
+  }
 
   const facilitatorClient = new HTTPFacilitatorClient({
     url: "https://channels.openzeppelin.com/x402/testnet",
@@ -71,9 +81,9 @@ function createApp() {
           accepts: [
             {
               scheme: "exact",
-              price: "0.01",
+              price: X402_PRICE,
               network: "stellar:testnet",
-              payTo: recipientAddress || "GBPLACEHOLDERRECIPIENTADDRESS1234567890",
+              payTo: recipientAddress,
             },
           ],
         },
@@ -83,13 +93,7 @@ function createApp() {
   );
 
   expressApp.get("/api/market-data", (req, res) => {
-    const recipient = getPaymentRecipientAddress();
-
-    if (!recipient) {
-      return res.status(500).json(marketDataConfigError());
-    }
-
-    return res.status(200).json(buildMarketDataPayload(recipient));
+    return res.status(200).json(buildMarketDataPayload(recipientAddress));
   });
 
   return expressApp;
@@ -117,6 +121,10 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       success: false,
       error: "Method not allowed.",
     });
+  }
+
+  if (!getPaymentRecipientAddress()) {
+    return res.status(500).json(marketDataConfigError());
   }
 
   return getApp()(req, res);

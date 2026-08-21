@@ -2,6 +2,24 @@ import { Keypair, Horizon, Asset, TransactionBuilder, Operation, Networks } from
 import fs from "fs";
 import path from "path";
 
+const USDC_ISSUER = "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5";
+
+function readExistingEnvironment(envPath: string) {
+  if (!fs.existsSync(envPath)) return new Map<string, string>();
+
+  return new Map(
+    fs
+      .readFileSync(envPath, "utf-8")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line && !line.startsWith("#") && line.includes("="))
+      .map((line) => {
+        const separator = line.indexOf("=");
+        return [line.slice(0, separator), line.slice(separator + 1)] as const;
+      })
+  );
+}
+
 async function fundAccount(publicKey: string, label: string) {
   console.log(`Funding ${label} account (${publicKey}) via Friendbot...`);
   // Friendbot activates and funds the account with 10,000 XLM
@@ -29,7 +47,7 @@ async function main() {
   // Establish trustlines for USDC
   console.log("Connecting to Horizon Testnet server...");
   const server = new Horizon.Server("https://horizon-testnet.stellar.org");
-  const usdcAsset = new Asset("USDC", "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5");
+  const usdcAsset = new Asset("USDC", USDC_ISSUER);
 
   async function createTrustline(keypair: Keypair, label: string) {
     console.log(`Establishing USDC trustline for ${label} account...`);
@@ -56,7 +74,18 @@ async function main() {
   await createTrustline(agentKeypair, "Agent (Buyer)");
   await createTrustline(recipientKeypair, "Recipient (Seller)");
 
-  // Write fresh keys directly to .env.local
+  // Preserve facilitator and deployed-contract configuration when rotating test accounts.
+  const envPath = path.resolve(process.cwd(), ".env.local");
+  const existingEnvironment = readExistingEnvironment(envPath);
+  const preservedKeys = [
+    "FACILITATOR_API_KEY",
+    "DATA_REGISTRY_CONTRACT_ID",
+    "ACCESS_CONTROLLER_CONTRACT_ID",
+  ];
+  const preservedLines = preservedKeys
+    .filter((key) => existingEnvironment.has(key))
+    .map((key) => `${key}=${existingEnvironment.get(key)}`);
+
   const envContent = `# Stellar payment recipient address (The seller/resource server account)
 PAYMENT_RECIPIENT_ADDRESS=${recipientKeypair.publicKey()}
 
@@ -64,22 +93,23 @@ PAYMENT_RECIPIENT_ADDRESS=${recipientKeypair.publicKey()}
 AGENT_PRIVATE_KEY=${agentKeypair.secret()}
 
 # Configured USDC issuer for testnet
-USDC_ISSUER_ADDRESS=GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5
+USDC_ISSUER_ADDRESS=${USDC_ISSUER}
+${preservedLines.length ? `\n# Preserved service configuration\n${preservedLines.join("\n")}\n` : ""}
 `;
 
-  const envPath = path.resolve(process.cwd(), ".env.local");
-  fs.writeFileSync(envPath, envContent, "utf-8");
+  fs.writeFileSync(envPath, envContent, { encoding: "utf-8", mode: 0o600 });
+  fs.chmodSync(envPath, 0o600);
   
   console.log("\nSuccess: Configured and updated .env.local with fresh, fully configured testnet keys!");
   console.log("\nAccount Setup Details:");
   console.log(`1. Agent (Buyer) Account:`);
   console.log(`   - Public Key: ${agentKeypair.publicKey()}`);
-  console.log(`   - Secret Key: ${agentKeypair.secret()}`);
+  console.log(`   - Secret Key: stored in .env.local (not printed)`);
   console.log(`   - XLM Balance: 10,000 XLM`);
   console.log(`   - USDC Trustline: Active`);
   console.log(`2. Recipient (Seller) Account:`);
   console.log(`   - Public Key: ${recipientKeypair.publicKey()}`);
-  console.log(`   - Secret Key: ${recipientKeypair.secret()}`);
+  console.log(`   - Secret Key: not retained; the recipient does not sign gateway requests`);
   console.log(`   - XLM Balance: 10,000 XLM`);
   console.log(`   - USDC Trustline: Active`);
   

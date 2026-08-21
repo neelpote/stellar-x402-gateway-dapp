@@ -1,10 +1,30 @@
-import { Horizon } from "@stellar/stellar-sdk";
+import { Horizon, Keypair } from "@stellar/stellar-sdk";
+import fs from "fs";
+import path from "path";
+
+function loadLocalEnvironment() {
+  const envPath = path.resolve(process.cwd(), ".env.local");
+  if (!fs.existsSync(envPath)) return;
+
+  for (const line of fs.readFileSync(envPath, "utf-8").split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#") || !trimmed.includes("=")) continue;
+    const separator = trimmed.indexOf("=");
+    const key = trimmed.slice(0, separator);
+    const value = trimmed.slice(separator + 1);
+    if (!process.env[key]) process.env[key] = value;
+  }
+}
 
 async function main() {
+  loadLocalEnvironment();
   const server = new Horizon.Server("https://horizon-testnet.stellar.org");
-  
-  const agentPub = "GBMXRWVHM4JA3VPIB7BT25WMEKJQX4OXCWT5BZZGQWKLACUFKETZZ6CF";
-  const recipientPub = "GAAJFP5Q4U76HQXINWVS7STDQP75VLJIRDLY2MAOQ5A3BZ73QZ6NR7PI";
+  const agentSecret = process.env.AGENT_PRIVATE_KEY;
+  const recipientPub = process.env.PAYMENT_RECIPIENT_ADDRESS;
+  if (!agentSecret || !recipientPub) {
+    throw new Error("AGENT_PRIVATE_KEY and PAYMENT_RECIPIENT_ADDRESS are required in .env.local");
+  }
+  const agentPub = Keypair.fromSecret(agentSecret).publicKey();
 
   async function check(pub: string, label: string) {
     console.log(`\nBalances for ${label} (${pub}):`);

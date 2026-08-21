@@ -1,16 +1,13 @@
-[package]
-name = "contracts"
-version = "0.1.0"
+[workspace]
+members = ["access-controller", "data-registry"]
+resolver = "2"
+
+[workspace.package]
+version = "0.2.0"
 edition = "2021"
 
-[lib]
-crate-type = ["cdylib", "rlib"]
-
-[dependencies]
-soroban-sdk = "21.7.2"
-
-[dev-dependencies]
-soroban-sdk = { version = "21.7.2", features = ["testutils"] }
+[workspace.dependencies]
+soroban-sdk = "=27.0.3"
 
 [profile.release]
 opt-level = "z"

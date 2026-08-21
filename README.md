@@ -1,171 +1,204 @@
-# 🌌 Stellar x402 Pay-Per-Request Gateway dApp
+# Stellar x402 Pay-Per-Request Gateway
 
-**Live Demo:** [stellar-x402-gateway-dapp.vercel.app](https://stellar-x402-gateway-dapp.vercel.app)
+A Next.js example of an HTTP `402 Payment Required` gateway on Stellar testnet, plus an independent pair of Soroban contracts for atomic contract-based payment and registry access.
 
-[![CI/CD Pipeline](https://github.com/neelpote/x402payments/actions/workflows/ci.yml/badge.svg)](https://github.com/neelpote/x402payments/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Soroban SDK Version](https://img.shields.io/badge/Soroban%20SDK-21.7.7-blue)](https://crates.io/crates/soroban-sdk)
-[![Next.js Pages Router](https://img.shields.io/badge/Next.js-14.2.35-black)](https://nextjs.org/)
+[![CI/CD Pipeline](https://github.com/neelpote/stellar-x402-gateway-dapp/actions/workflows/ci.yml/badge.svg)](https://github.com/neelpote/stellar-x402-gateway-dapp/actions/workflows/ci.yml)
 
-An enterprise-grade, full-stack decentralized application implementing the **x402 pay-per-request payment gating protocol** on the Stellar blockchain network. This project features secure smart contract-to-contract communication, automated client handshake negotiation, a responsive dark-themed telemetry dashboard, and complete unit/integration test coverage.
+## Live deployment and contracts
 
----
+- Dashboard: [stellar-x402-gateway-dapp.vercel.app](https://stellar-x402-gateway-dapp.vercel.app)
+- Uptime health check: [api/health](https://stellar-x402-gateway-dapp.vercel.app/api/health)
+- DataRegistry: [`CBNK...DDHAO`](https://stellar.expert/explorer/testnet/contract/CBNKLZ5OTWONHLNGFE274SFCVUEDOTLSCKQE3DCO3KESHOF7O4DDDHAO)
+- AccessController: [`CB2L...K7RYH`](https://stellar.expert/explorer/testnet/contract/CB2LLC37XM3AMQOYWMML6R6HHBFKIMYUNC4LTK5AIJ2244ALGSGK7RYH)
 
-## 🏗️ System Architecture
+The dashboard is an intentional browser walkthrough: it makes an unauthenticated request to expose the real 402 challenge, then simulates wallet signing. The `scripts/agent.ts` client is the real signed x402 payment path. This distinction prevents a browser demo from silently requesting a private key or charging a user.
 
+## What is real
+
+The repository contains two distinct payment paths:
+
+1. **HTTP x402 gateway** — `/api/market-data` uses `@x402/express`, the Stellar exact-payment scheme, and the OpenZeppelin testnet facilitator. The facilitator verifies and settles a Stellar payment before the buffered API response is released.
+2. **Soroban contract path** — `AccessController` transfers a configured token amount and calls `DataRegistry` in one atomic invocation. This path has separate WASM artifacts and can be deployed independently.
+
+The HTTP facilitator does not invoke `AccessController`. Combining those paths in a single request would charge the buyer twice. The browser dashboard visibly simulates the wallet portion of the flow; `npm run test:agent` is the real paying HTTP client.
+
+## HTTP x402 flow
+
+```text
+Paying client                    Next.js resource server             Facilitator / Stellar
+     |                                      |                               |
+     | GET /api/market-data                 |                               |
+     |------------------------------------->|                               |
+     | 402 + exact payment requirements     |                               |
+     |<-------------------------------------|                               |
+     | retry with signed payment payload    |                               |
+     |------------------------------------->| verify and settle ------------>|
+     |                                      |<---------------- success ------|
+     | 200 protected payload                |                               |
+     |<-------------------------------------|                               |
 ```
- +-------------------------+                       +-----------------------------+
- |                         |                       |      Next.js API Server     |
- |   Paying Client Agent   |                       |     (/api/market-data)      |
- |     (scripts/agent)     |                       +--------------+--------------+
- +------------+------------+                                      |
-              |                                                   | (Intercepts request via middleware)
-              | --- 1. GET /api/market-data --------------------> |
-              |                                                   |
-              | <--- 2. HTTP 402 + Payment Requirement Headers -- |
-              |                                                   |
-              | (Extracts challenge & signs transaction payload)  |
-              |                                                   |
-              | --- 3. Submits payment transfer transaction ----> | (USDC Token SAC on Stellar testnet)
-              |                                                   |
-              | --- 4. Retries GET with Transaction Proof Header -> |
-              |                                                   | (Validates via OpenZeppelin Facilitator)
-              |                                                   | (Triggers on-chain AccessController)
-              |                                                   | (AccessController calls DataRegistry)
-              |                                                   | (Emits native events & unlocks hash)
-              |                                                   |
-              | <--- 5. HTTP 200 OK + Unlocked Premium IPFS Hash - |
-              v                                                   v
-```
 
-1. **Gated Resource Request**: The paying client initiates a standard HTTP `GET` request to `/api/market-data` to query protected intelligence.
-2. **HTTP 402 Gating**: The server intercepts the call using `@x402/express` middleware, verifying that no valid transaction proof was provided. It returns an `HTTP 402 Payment Required` status, specifying the destination recipient address, required asset (0.01 USDC), and the network.
-3. **Transaction Settlement**: The client (wrapped in `@x402/fetch` layer) parses the response challenge, generates a transfer transaction using the agent's private key, submits the transaction on-chain to the USDC Stellar Asset Contract (SAC), and captures the transaction hash.
-4. **Access Validation & Execution**: The client resubmits the request, appending the transaction hash inside the header credentials. The resource server routes this proof through the OpenZeppelin Facilitator which invokes the deployed smart contracts on-chain to verify the token movement.
-5. **Cross-Contract Delivery**: The `AccessController` contract confirms the USDC transfer, invokes the `DataRegistry` contract to log the query telemetry event, and returns the unlocked IPFS hash back to the server, which serves it inside an `HTTP 200 OK` payload.
+The configured HTTP price is **0.01 USDC**. The API fails closed when `PAYMENT_RECIPIENT_ADDRESS` is missing or is not a valid Stellar account address.
 
----
+## Soroban contracts
 
-## 📜 Smart Contract Registries (Stellar Testnet)
+### DataRegistry
 
-Smart contracts are written in Rust, targeted for WASM compilation, and configured with the `soroban-sdk` dependency.
+- Constructed atomically with an administrator; only that administrator can configure the authorized `AccessController` address.
+- Only the administrator can create or overwrite records.
+- Only the configured controller can call `get_data`.
+- Persistent records and instance configuration extend their storage TTL.
+- Missing records fail explicitly instead of returning a fake default value.
 
-| Contract Name | Asset Code / Identifier | Testnet Deployment Address / Explorer Link |
-| :--- | :--- | :--- |
-| **USDC Token (SAC)** | `USDC` | [`GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5`](https://stellar.expert/explorer/testnet/asset/USDC-GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5) |
-| **DataRegistry** | Storage gateway | [`CCDATAREGISTRYCONTRACTID1234567890SAMPLEONLY`](https://stellar.expert/explorer/testnet) |
-| **AccessController** | Router interface | [`CCACCESSCONTROLLERCONTRACTID1234567890SAMPLE`](https://stellar.expert/explorer/testnet) |
+### AccessController
 
----
+- Constructed atomically with the administrator, seller, token contract, registry, and positive fixed price.
+- Buyers cannot supply or override the seller, token, registry, or price.
+- Buyer authorization is required.
+- Token transfer and registry lookup are atomic; a failed lookup rolls back the transfer.
+- Only the administrator can update payment configuration or transfer administration.
 
-## ⚙️ Environment Configuration
+Stellar contract storage and return values are public. Store public metadata, commitments, or encrypted content references in `DataRegistry`—never plaintext secrets.
 
-Generate a `.env.local` file in your project root using the following template:
+## Configuration
+
+Copy `.env.example` to `.env.local` and provide real testnet values:
 
 ```env
-# Stellar payment recipient address (The seller/resource server account)
-PAYMENT_RECIPIENT_ADDRESS=GAAJFP5Q4U76HQXINWVS7STDQP75VLJIRDLY2MAOQ5A3BZ73QZ6NR7PI
-
-# Stellar private key of the paying client (The buyer/AI agent account)
-AGENT_PRIVATE_KEY=SAXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-
-# Configured USDC issuer for testnet
+PAYMENT_RECIPIENT_ADDRESS=G...
+AGENT_PRIVATE_KEY=S...
+FACILITATOR_API_KEY=replace-with-your-testnet-key
 USDC_ISSUER_ADDRESS=GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5
-
-# OpenZeppelin channel testnet API Key (obtained from /testnet/gen)
-FACILITATOR_API_KEY=c5c59ca5-9794-4f66-a6f4-7cb03fbfa98e
 ```
 
----
+`AGENT_PRIVATE_KEY` is used only by the command-line paying client. It must never be exposed through a `NEXT_PUBLIC_` variable or sent to the browser.
 
-## 🚀 Step-by-Step Installation & Usage
+## Install and run
 
-### Prerequisites
-- **Node.js** (v18.0.0 or higher)
-- **Rust & Cargo** (for compiled contracts)
+Prerequisites: Node.js 20+, Rust 1.91+, and the `wasm32v1-none` Rust target.
 
-### 1. Install Dependencies
-Initialize package requirements in the project root:
 ```bash
-npm install
+npm ci
+npm run dev
 ```
 
-### 2. Auto-Provision Keys & Trustlines
-Run the automated account provisioning utility. It will generate keypairs for the paying agent and receiving merchant, fund both with native XLM via Friendbot, register trustlines for the testnet USDC token contract, and append parameters directly to your `.env.local`:
+In another terminal, confirm the raw challenge:
+
+```bash
+npm run test:bounce
+```
+
+Run the real signed x402 client after configuring and funding the agent account:
+
+```bash
+npm run test:agent
+```
+
+The setup helper creates fresh testnet accounts and trustlines. It stores the buyer secret in the permission-restricted `.env.local` file and does not print secrets:
+
 ```bash
 npm run setup:keys
-```
-
-To view Horizon ledger balances of the provisioned accounts at any time, run:
-```bash
 npm run check:balances
 ```
 
-### 3. Mint Testnet USDC
-1. Go to the [Circle Developer Faucet](https://faucet.circle.com/).
-2. Select **Stellar** in the network dropdown.
-3. Paste the **Agent's Public Key** (generated in Step 2).
-4. Request dev USDC tokens (20.00 USDC will be minted to the wallet).
+## Test and build
 
----
+Run the 13 Soroban unit and security tests:
 
-## 🔬 Testing & Verifications
-
-### 1. Rust Smart Contract Tests (Cargo)
-Run the Rust integration test suite which asserts cross-contract querying, minting logic, token balances transfers, and native events publication:
 ```bash
-cargo test --manifest-path contracts/Cargo.toml
+cargo test --manifest-path contracts/Cargo.toml --locked
 ```
 
-### 2. Full-Stack Jest Tests (TypeScript & RTL)
-Verify frontend DOM element rendering (header, status card, loading spinners, Toast elements) and backend API configurations:
+Build the two deployable WASM artifacts:
+
 ```bash
-npm run test
+cargo build \
+  --manifest-path contracts/Cargo.toml \
+  --locked \
+  --release \
+  --target wasm32v1-none \
+  -p data-registry \
+  -p access-controller
 ```
 
-### 3. Local Handshake Handlers (Dev Server)
-To observe the network intercepting the request and completing the payment handshake automatically:
-1. Start the Next.js API server:
-   ```bash
-   npm run dev
-   ```
-2. Trigger the bounce test in a new terminal to confirm the raw HTTP 402 challenge occurs:
-   ```bash
-   npm run test:bounce
-   ```
-3. Trigger the automatic payment agent:
-   ```bash
-   npm run test:agent
-   ```
+Artifacts:
 
----
+- `contracts/target/wasm32v1-none/release/data_registry.wasm`
+- `contracts/target/wasm32v1-none/release/access_controller.wasm`
 
-## 📂 Project Structure Map
+Run the application tests and production build:
 
+```bash
+npm test -- --runInBand
+npm run build
 ```
-├── .github/workflows/ci.yml       # CI/CD test and build pipelines
-├── contracts/                     # Soroban Rust Smart Contract Workspace
-│   ├── src/
-│   │   ├── lib.rs                 # Contract logics (Registry & Access)
-│   │   └── test.rs                # Integration test assertions
-│   └── Cargo.toml                 # Cargo dependencies configurations
-├── pages/
-│   ├── _app.tsx                   # Main global layout wrapper
-│   ├── index.tsx                  # Interactive dark dashboard UI
-│   └── api/
-│       └── market-data.ts         # Protected x402 middleware resource
-├── scripts/                       # Developer utility scripts
-│   ├── agent.ts                   # Handshake automated buyer client
-│   ├── check-balances.ts          # Balance inspector tool
-│   ├── generate-and-setup.ts      # Automated account & trustline generator
-│   └── test-402-bounce.ts         # Gating assertion tester
-├── styles/
-│   └── globals.css                # Global Tailwind CSS configurations
-├── tests/                         # Full-stack Jest test cases
-│   ├── backend.test.ts            # Route handler type tests
-│   └── frontend.test.tsx          # DOM render and interaction test suites
-├── tailwind.config.js             # Styling tokens and themes
-├── postcss.config.js              # PostCSS plugins configurations
-├── jest.config.js                 # Jest configurations for TS/ESM compilation
-└── jest.setup.js                  # JSDOM global class polyfills
+
+CI runs all three checks and builds both WASMs. There are no placeholder deployment IDs checked into the repository.
+
+## Deploy the contract path
+
+The following outline uses a configured Stellar CLI identity named `deployer`. Deployment is an explicit operation and is not performed by the test suite.
+
+```bash
+ADMIN_ADDRESS=$(stellar keys address deployer)
+
+DATA_REGISTRY_CONTRACT_ID=$(stellar contract deploy \
+  --wasm contracts/target/wasm32v1-none/release/data_registry.wasm \
+  --source deployer \
+  --network testnet \
+  -- \
+  --admin "$ADMIN_ADDRESS")
+
+ACCESS_CONTROLLER_CONTRACT_ID=$(stellar contract deploy \
+  --wasm contracts/target/wasm32v1-none/release/access_controller.wasm \
+  --source deployer \
+  --network testnet \
+  -- \
+  --admin "$ADMIN_ADDRESS" \
+  --seller "$SELLER_ADDRESS" \
+  --token "$TOKEN_CONTRACT_ID" \
+  --registry "$DATA_REGISTRY_CONTRACT_ID" \
+  --price 100000)
 ```
+
+Both contracts use deploy-time constructors, so their administrators and payment terms are set atomically and cannot be claimed in a front-running initialization transaction. After deploying the controller, authorize it in the registry:
+
+```bash
+stellar contract invoke \
+  --id "$DATA_REGISTRY_CONTRACT_ID" \
+  --source deployer \
+  --network testnet \
+  -- set_controller \
+  --controller "$ACCESS_CONTROLLER_CONTRACT_ID"
+```
+
+After deployment, put the two returned contract IDs in `.env.local` for operational reference.
+
+## Project layout
+
+```text
+contracts/
+├── Cargo.toml                       # Rust workspace
+├── access-controller/               # Fixed-price atomic payment contract
+│   └── src/{lib.rs,test.rs}
+└── data-registry/                   # Admin-controlled registry contract
+    └── src/{lib.rs,test.rs}
+pages/
+├── api/market-data.ts               # Protected x402 HTTP resource
+└── index.tsx                        # Clearly labelled browser walkthrough
+scripts/
+├── agent.ts                         # Real signed x402 client
+├── generate-and-setup.ts            # Testnet account setup
+└── check-balances.ts                # Environment-based balance lookup
+tests/                               # API and UI tests
+```
+
+## Production operations
+
+Vercel Web Analytics captures page views and the dashboard's non-sensitive product events. Speed Insights reports real-user performance. The unauthenticated `GET /api/health` endpoint returns `200` only when the payment recipient and facilitator key are configured; configure it as an uptime monitor in the deployment platform.
+
+The included `vercel.json` adds browser security headers without imposing a content security policy that could break the Next.js runtime. The Vercel project needs only `PAYMENT_RECIPIENT_ADDRESS` and `FACILITATOR_API_KEY`. Keep `AGENT_PRIVATE_KEY` and `USDC_ISSUER_ADDRESS` local for the payment-client and setup scripts; never upload a buyer secret to the web deployment.
+
+## Submission assets
+
+`docs/SUBMISSION.md` contains the checklist, live links, verified contract addresses, screenshots, feedback template, and final verification commands. `docs/DEMO_SCRIPT.md` is a short recording plan that demonstrates both the visual walkthrough and the real paying client.

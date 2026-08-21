@@ -9,6 +9,9 @@ const customJestConfig = {
   testEnvironment: "jest-environment-jsdom",
   moduleNameMapper: {
     "^@/(.*)$": "<rootDir>/$1",
+    "^@vercel/analytics$": "<rootDir>/tests/mocks/vercel-analytics.ts",
+    "^@vercel/analytics/next$": "<rootDir>/tests/mocks/vercel-analytics.ts",
+    "^@vercel/speed-insights/next$": "<rootDir>/tests/mocks/vercel-speed-insights.ts",
   },
 };
 

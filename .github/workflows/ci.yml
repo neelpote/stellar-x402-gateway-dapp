@@ -26,7 +26,7 @@ jobs:
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: wasm32-unknown-unknown
+          targets: wasm32v1-none
 
       - name: Cache Cargo registry & build cache
         uses: actions/cache@v4
@@ -41,6 +41,9 @@ jobs:
 
       - name: Run Soroban contract tests
         run: cargo test --manifest-path contracts/Cargo.toml --locked
+
+      - name: Build deployable Soroban WASM artifacts
+        run: cargo build --manifest-path contracts/Cargo.toml --locked --release --target wasm32v1-none -p data-registry -p access-controller
 
       - name: Run TypeScript & Jest tests
         run: npm run test

@@ -35,6 +35,10 @@ export function isValidPaymentRecipientAddress(value: string | undefined): value
   return typeof value === "string" && StrKey.isValidEd25519PublicKey(value.trim());
 }
 
+export function hasFacilitatorApiKey(value: string | undefined): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
 function getPaymentRecipientAddress() {
   const value = process.env.PAYMENT_RECIPIENT_ADDRESS;
   return isValidPaymentRecipientAddress(value) ? value.trim() : undefined;
@@ -42,10 +46,10 @@ function getPaymentRecipientAddress() {
 
 function getAuthHeaders(): Record<string, string> {
   const key = process.env.FACILITATOR_API_KEY;
-  return key
+  return hasFacilitatorApiKey(key)
     ? {
-        Authorization: `Bearer ${key}`,
-        "X-API-Key": key,
+        Authorization: `Bearer ${key.trim()}`,
+        "X-API-Key": key.trim(),
       }
     : {};
 }

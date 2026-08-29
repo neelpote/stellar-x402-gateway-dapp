@@ -31,6 +31,7 @@ jest.mock("@x402/stellar/exact/server", () => {
 import handler, {
   buildMarketDataPayload,
   config,
+  hasFacilitatorApiKey,
   isValidPaymentRecipientAddress,
   marketDataConfigError,
   resetMarketDataAppForTests,
@@ -116,6 +117,12 @@ describe("Market Data API Route Configuration", () => {
     expect(isValidPaymentRecipientAddress(undefined)).toBe(false);
   });
 
+  it("requires a non-empty facilitator API key", () => {
+    expect(hasFacilitatorApiKey("test-key")).toBe(true);
+    expect(hasFacilitatorApiKey("   ")).toBe(false);
+    expect(hasFacilitatorApiKey(undefined)).toBe(false);
+  });
+
   it("fails closed when the payment recipient is missing", () => {
     const originalRecipient = process.env.PAYMENT_RECIPIENT_ADDRESS;
     delete process.env.PAYMENT_RECIPIENT_ADDRESS;
@@ -185,6 +192,24 @@ describe("Health API Route", () => {
         status: "degraded",
         checks: {
           paymentRecipientConfigured: false,
+          facilitatorConfigured: false,
+        },
+      })
+    );
+  });
+
+  it("returns a degraded signal for a whitespace-only facilitator key", () => {
+    process.env.PAYMENT_RECIPIENT_ADDRESS = "GBMXRWVHM4JA3VPIB7BT25WMEKJQX4OXCWT5BZZGQWKLACUFKETZZ6CF";
+    process.env.FACILITATOR_API_KEY = "   ";
+    const response = createJsonResponse();
+
+    healthHandler({ method: "GET" } as any, response as any);
+
+    expect(response.status).toHaveBeenCalledWith(503);
+    expect(response.payload).toEqual(
+      expect.objectContaining({
+        checks: {
+          paymentRecipientConfigured: true,
           facilitatorConfigured: false,
         },
       })

@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { isValidPaymentRecipientAddress } from "./market-data";
+import { hasFacilitatorApiKey, isValidPaymentRecipientAddress } from "./market-data";
 
 type HealthResponse = {
   status: "ok" | "degraded";
@@ -19,7 +19,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse<Health
 
   const checks = {
     paymentRecipientConfigured: isValidPaymentRecipientAddress(process.env.PAYMENT_RECIPIENT_ADDRESS),
-    facilitatorConfigured: Boolean(process.env.FACILITATOR_API_KEY),
+    facilitatorConfigured: hasFacilitatorApiKey(process.env.FACILITATOR_API_KEY),
   };
   const ready = checks.paymentRecipientConfigured && checks.facilitatorConfigured;
 

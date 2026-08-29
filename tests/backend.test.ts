@@ -40,24 +40,32 @@ import handler, {
 } from "@/pages/api/market-data";
 import healthHandler from "@/pages/api/health";
 
-function createJsonResponse() {
-  const response = {
-    statusCode: 200,
-    headers: {} as Record<string, string>,
-    payload: undefined as unknown,
-    setHeader: jest.fn((name: string, value: string) => {
-      response.headers[name] = value;
-      return response;
-    }),
-    status: jest.fn((statusCode: number) => {
-      response.statusCode = statusCode;
-      return response;
-    }),
-    json: jest.fn((payload: unknown) => {
-      response.payload = payload;
-      return response;
-    }),
-  };
+interface MockJsonResponse {
+  statusCode: number;
+  headers: Record<string, string>;
+  payload: unknown;
+  setHeader: jest.Mock;
+  status: jest.Mock;
+  json: jest.Mock;
+}
+
+function createJsonResponse(): MockJsonResponse {
+  const response = {} as MockJsonResponse;
+  response.statusCode = 200;
+  response.headers = {};
+  response.payload = undefined;
+  response.setHeader = jest.fn((name: string, value: string) => {
+    response.headers[name] = value;
+    return response;
+  });
+  response.status = jest.fn((statusCode: number) => {
+    response.statusCode = statusCode;
+    return response;
+  });
+  response.json = jest.fn((payload: unknown) => {
+    response.payload = payload;
+    return response;
+  });
 
   return response;
 }

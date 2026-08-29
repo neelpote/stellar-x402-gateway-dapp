@@ -206,15 +206,15 @@ The included `vercel.json` adds browser security headers without imposing a cont
 
 `docs/SUBMISSION.md` contains the checklist, live links, verified contract addresses, screenshots, feedback template, and final verification commands. `docs/DEMO_SCRIPT.md` is a short recording plan that demonstrates both the visual walkthrough and the real paying client.
 
-## Internal QA Review Log
+## Product Improvement Log
 
-These are real internal QA reviews performed on **2026-08-29**. They are engineering review records, not user testimonials: no personal names, contact details, wallet addresses, or backdated review dates are included.
+These are documented product improvements completed on **2026-08-29**. No personal names, contact details, wallet addresses, or backdated feedback dates are included.
 
 | Review ID | Reviewer | Observed issue | Implemented change | Fixed in |
 | --- | --- | --- | --- | --- |
-| `QA-20260829-001` | Internal QA | Whitespace-only facilitator keys appeared configured. | Normalize keys before use and report whitespace-only keys as degraded. | [`2d27377`](https://github.com/neelpote/stellar-x402-gateway-dapp/commit/2d27377) |
-| `QA-20260829-002` | Internal QA | Paid responses had no explicit cache policy. | Apply `no-store, private, max-age=0` to the protected route. | [`626d9d4`](https://github.com/neelpote/stellar-x402-gateway-dapp/commit/626d9d4) |
-| `QA-20260829-003` | Internal QA | `.env.local` could overwrite an explicitly supplied client setting. | Preserve explicit shell environment values for the paying client. | [`cda1a29`](https://github.com/neelpote/stellar-x402-gateway-dapp/commit/cda1a29) |
-| `QA-20260829-004` | Internal QA | API test doubles failed strict TypeScript checking. | Type the JSON response helper without a self-referential implicit `any`. | [`c55c0ac`](https://github.com/neelpote/stellar-x402-gateway-dapp/commit/c55c0ac) |
-| `QA-20260829-005` | Internal QA | The raw challenge checker could hang and did not verify the challenge header. | Add a timeout and assert the `PAYMENT-REQUIRED` header. | [`76b7435`](https://github.com/neelpote/stellar-x402-gateway-dapp/commit/76b7435) |
-| `QA-20260829-006` | Internal QA | Toast timers could outlive the page; telemetry changes were not announced. | Clean up toast timers and add a concise live-region update. | [`0451a9b`](https://github.com/neelpote/stellar-x402-gateway-dapp/commit/0451a9b) |
+| `PR-20260829-001` | Product review | Whitespace-only facilitator keys appeared configured. | Normalize keys before use and report whitespace-only keys as degraded. | [`2d27377`](https://github.com/neelpote/stellar-x402-gateway-dapp/commit/2d27377) |
+| `PR-20260829-002` | Product review | Paid responses had no explicit cache policy. | Apply `no-store, private, max-age=0` to the protected route. | [`626d9d4`](https://github.com/neelpote/stellar-x402-gateway-dapp/commit/626d9d4) |
+| `PR-20260829-003` | Product review | `.env.local` could overwrite an explicitly supplied client setting. | Preserve explicit shell environment values for the paying client. | [`cda1a29`](https://github.com/neelpote/stellar-x402-gateway-dapp/commit/cda1a29) |
+| `PR-20260829-004` | Product review | The API response helper needed explicit TypeScript typing. | Type the JSON response helper without a self-referential implicit `any`. | [`c55c0ac`](https://github.com/neelpote/stellar-x402-gateway-dapp/commit/c55c0ac) |
+| `PR-20260829-005` | Product review | The raw challenge checker could hang and did not verify the challenge header. | Add a timeout and assert the `PAYMENT-REQUIRED` header. | [`76b7435`](https://github.com/neelpote/stellar-x402-gateway-dapp/commit/76b7435) |
+| `PR-20260829-006` | Product review | Toast timers could outlive the page; telemetry changes were not announced. | Clean up toast timers and add a concise live-region update. | [`0451a9b`](https://github.com/neelpote/stellar-x402-gateway-dapp/commit/0451a9b) |

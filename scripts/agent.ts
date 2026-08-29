@@ -5,7 +5,7 @@ import { createEd25519Signer } from "@x402/stellar";
 import fs from "fs";
 import path from "path";
 
-// Load environment variables manually from .env.local for standard node execution
+// Load missing values from .env.local while allowing explicit shell configuration to win.
 const envPath = path.resolve(process.cwd(), ".env.local");
 if (fs.existsSync(envPath)) {
   const envContent = fs.readFileSync(envPath, "utf-8");
@@ -16,7 +16,7 @@ if (fs.existsSync(envPath)) {
     if (parts.length >= 2) {
       const key = parts[0].trim();
       const val = parts.slice(1).join("=").trim().replace(/^['"]|['"]$/g, "");
-      process.env[key] = val;
+      if (!process.env[key]) process.env[key] = val;
     }
   }
 }

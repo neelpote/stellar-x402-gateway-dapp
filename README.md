@@ -95,7 +95,7 @@ Run the real signed x402 client after configuring and funding the agent account:
 npm run test:agent
 ```
 
-Both command-line clients default to `http://127.0.0.1:3000`, which avoids a local IPv6 `localhost` mismatch. Set `GATEWAY_BASE_URL` to point them at a deployed gateway instead.
+Both command-line clients default to `http://127.0.0.1:3000`, which avoids a local IPv6 `localhost` mismatch. Set `GATEWAY_BASE_URL` to point them at a deployed gateway instead. Explicit shell environment values take precedence over `.env.local` values.
 
 The setup helper creates fresh testnet accounts and trustlines. It stores the buyer secret in the permission-restricted `.env.local` file and does not print secrets:
 

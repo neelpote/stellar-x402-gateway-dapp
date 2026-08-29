@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Head from "next/head";
 import { track } from "@vercel/analytics";
 import {
@@ -103,6 +103,7 @@ export default function Home() {
   const [premiumData, setPremiumData] = useState<PremiumData | null>(null);
   const [logs, setLogs] = useState<TelemetryLog[]>([]);
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  const toastTimeoutRef = useRef<number | null>(null);
 
   const selectedResource = resources[selectedReport];
 
@@ -131,14 +132,26 @@ export default function Home() {
   };
 
   const triggerToast = (type: ToastMessage["type"], text: string) => {
+    if (toastTimeoutRef.current !== null) {
+      window.clearTimeout(toastTimeoutRef.current);
+    }
     setToast({ type, text });
-    window.setTimeout(() => setToast(null), 4200);
+    toastTimeoutRef.current = window.setTimeout(() => {
+      setToast(null);
+      toastTimeoutRef.current = null;
+    }, 4200);
   };
 
   useEffect(() => {
     addLog("info", "Resource server online at /api/market-data.");
     addLog("info", "OpenZeppelin facilitator channel configured for stellar:testnet.");
     track("gateway_dashboard_opened");
+
+    return () => {
+      if (toastTimeoutRef.current !== null) {
+        window.clearTimeout(toastTimeoutRef.current);
+      }
+    };
   }, []);
 
   const probeProtectedResource = async () => {
@@ -503,6 +516,9 @@ export default function Home() {
             id="telemetry"
             className="rounded-[8px] border border-[#D9D2C7] bg-[#FBFAF6] p-5 shadow-[0_18px_50px_rgba(20,20,19,0.08)] md:p-6 lg:sticky lg:top-24"
           >
+            <div aria-live="polite" className="sr-only">
+              {logs[0] ? `Latest telemetry update: ${logs[0].message}` : ""}
+            </div>
             <div className="mb-5 flex items-center justify-between gap-4">
               <div>
                 <h2 className="flex items-center gap-2 text-xl font-semibold tracking-normal">

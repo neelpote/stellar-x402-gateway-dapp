@@ -112,4 +112,12 @@ describe("Stellar x402 Gateway Dashboard", () => {
     expect(screen.getByText("Premium resource locked")).toBeInTheDocument();
     expect(screen.getByText("No telemetry recorded.")).toBeInTheDocument();
   });
+
+  it("announces the latest telemetry event for assistive technology", () => {
+    render(<Home />);
+
+    expect(document.querySelector('[aria-live="polite"]')).toHaveTextContent(
+      "Latest telemetry update: OpenZeppelin facilitator channel configured for stellar:testnet."
+    );
+  });
 });

@@ -34,6 +34,7 @@ import handler, {
   hasFacilitatorApiKey,
   isValidPaymentRecipientAddress,
   marketDataConfigError,
+  PAYMENT_RESPONSE_CACHE_CONTROL,
   resetMarketDataAppForTests,
   X402_PRICE,
 } from "@/pages/api/market-data";
@@ -80,11 +81,27 @@ describe("Market Data API Route Configuration", () => {
     handler({ method: "POST" } as any, response as any);
 
     expect(response.setHeader).toHaveBeenCalledWith("Allow", "GET");
+    expect(response.setHeader).toHaveBeenCalledWith("Cache-Control", PAYMENT_RESPONSE_CACHE_CONTROL);
     expect(response.status).toHaveBeenCalledWith(405);
     expect(response.payload).toEqual({
       success: false,
       error: "Method not allowed.",
     });
+  });
+
+  it("disables caching for every protected-resource response", () => {
+    const response = createJsonResponse();
+    const originalRecipient = process.env.PAYMENT_RECIPIENT_ADDRESS;
+    delete process.env.PAYMENT_RECIPIENT_ADDRESS;
+    resetMarketDataAppForTests();
+
+    handler({ method: "GET" } as any, response as any);
+
+    expect(response.headers["Cache-Control"]).toBe(PAYMENT_RESPONSE_CACHE_CONTROL);
+    if (originalRecipient) {
+      process.env.PAYMENT_RECIPIENT_ADDRESS = originalRecipient;
+    }
+    resetMarketDataAppForTests();
   });
 
   it("should build the successful market data payload from the configured recipient", () => {

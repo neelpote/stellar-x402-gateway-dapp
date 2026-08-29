@@ -9,6 +9,7 @@ type ExpressApp = ReturnType<typeof express>;
 
 let app: ExpressApp | null = null;
 export const X402_PRICE = "0.01";
+export const PAYMENT_RESPONSE_CACHE_CONTROL = "no-store, private, max-age=0";
 
 export function buildMarketDataPayload(recipient: string) {
   return {
@@ -119,6 +120,8 @@ export function resetMarketDataAppForTests() {
 
 // Default next.js handler delegating execution to the Express app
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
+  res.setHeader("Cache-Control", PAYMENT_RESPONSE_CACHE_CONTROL);
+
   if (req.method !== "GET") {
     res.setHeader("Allow", "GET");
     return res.status(405).json({

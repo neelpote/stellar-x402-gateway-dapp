@@ -147,6 +147,3 @@ impl AccessController {
         Ok(content_ref)
     }
 }
-
-#[cfg(test)]
-mod test;

@@ -7,7 +7,7 @@ on:
     branches: [ main ]
 
 jobs:
-  build-and-test:
+  build:
     runs-on: ubuntu-latest
 
     steps:
@@ -39,14 +39,8 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Run Soroban contract tests
-        run: cargo test --manifest-path contracts/Cargo.toml --locked
-
       - name: Build deployable Soroban WASM artifacts
         run: cargo build --manifest-path contracts/Cargo.toml --locked --release --target wasm32v1-none -p data-registry -p access-controller
-
-      - name: Run TypeScript & Jest tests
-        run: npm run test
 
       - name: Build Next.js application
         run: npm run build

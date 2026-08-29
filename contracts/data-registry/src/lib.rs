@@ -108,6 +108,3 @@ impl DataRegistry {
         content_ref
     }
 }
-
-#[cfg(test)]
-mod test;

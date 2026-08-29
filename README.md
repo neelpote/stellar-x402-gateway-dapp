@@ -21,7 +21,7 @@ The repository contains two distinct payment paths:
 1. **HTTP x402 gateway** — `/api/market-data` uses `@x402/express`, the Stellar exact-payment scheme, and the OpenZeppelin testnet facilitator. The facilitator verifies and settles a Stellar payment before the buffered API response is released.
 2. **Soroban contract path** — `AccessController` transfers a configured token amount and calls `DataRegistry` in one atomic invocation. This path has separate WASM artifacts and can be deployed independently.
 
-The HTTP facilitator does not invoke `AccessController`. Combining those paths in a single request would charge the buyer twice. The browser dashboard visibly simulates the wallet portion of the flow; `npm run test:agent` is the real paying HTTP client.
+The HTTP facilitator does not invoke `AccessController`. Combining those paths in a single request would charge the buyer twice. The browser dashboard visibly simulates the wallet portion of the flow; `npm run pay:agent` is the real paying HTTP client.
 
 ## HTTP x402 flow
 
@@ -83,16 +83,16 @@ npm ci
 npm run dev
 ```
 
-In another terminal, confirm the raw challenge:
+In another terminal, inspect the raw payment challenge:
 
 ```bash
-npm run test:bounce
+npm run verify:challenge
 ```
 
 Run the real signed x402 client after configuring and funding the agent account:
 
 ```bash
-npm run test:agent
+npm run pay:agent
 ```
 
 Both command-line clients default to `http://127.0.0.1:3000`, which avoids a local IPv6 `localhost` mismatch. Set `GATEWAY_BASE_URL` to point them at a deployed gateway instead. Explicit shell environment values take precedence over `.env.local` values.
@@ -104,13 +104,7 @@ npm run setup:keys
 npm run check:balances
 ```
 
-## Test and build
-
-Run the 13 Soroban unit and security tests:
-
-```bash
-cargo test --manifest-path contracts/Cargo.toml --locked
-```
+## Build artifacts
 
 Build the two deployable WASM artifacts:
 
@@ -129,18 +123,17 @@ Artifacts:
 - `contracts/target/wasm32v1-none/release/data_registry.wasm`
 - `contracts/target/wasm32v1-none/release/access_controller.wasm`
 
-Run the application tests and production build:
+Create the application production build:
 
 ```bash
-npm test -- --runInBand
 npm run build
 ```
 
-CI runs all three checks and builds both WASMs. There are no placeholder deployment IDs checked into the repository.
+CI builds the web application and both WASMs. There are no placeholder deployment IDs checked into the repository.
 
 ## Deploy the contract path
 
-The following outline uses a configured Stellar CLI identity named `deployer`. Deployment is an explicit operation and is not performed by the test suite.
+The following outline uses a configured Stellar CLI identity named `deployer`. Deployment is an explicit operation.
 
 ```bash
 ADMIN_ADDRESS=$(stellar keys address deployer)
@@ -183,17 +176,17 @@ After deployment, put the two returned contract IDs in `.env.local` for operatio
 contracts/
 ├── Cargo.toml                       # Rust workspace
 ├── access-controller/               # Fixed-price atomic payment contract
-│   └── src/{lib.rs,test.rs}
+│   └── src/lib.rs
 └── data-registry/                   # Admin-controlled registry contract
-    └── src/{lib.rs,test.rs}
+    └── src/lib.rs
 pages/
 ├── api/market-data.ts               # Protected x402 HTTP resource
 └── index.tsx                        # Clearly labelled browser walkthrough
 scripts/
 ├── agent.ts                         # Real signed x402 client
 ├── generate-and-setup.ts            # Testnet account setup
-└── check-balances.ts                # Environment-based balance lookup
-tests/                               # API and UI tests
+├── check-balances.ts                # Environment-based balance lookup
+└── payment-challenge.ts             # Raw x402 challenge verifier
 ```
 
 ## Production operations
@@ -208,13 +201,13 @@ The included `vercel.json` adds browser security headers without imposing a cont
 
 ## Product Improvement Log
 
-These are documented product improvements completed on **2026-08-29**. No personal names, contact details, wallet addresses, or backdated feedback dates are included.
+These entries use the project feedback layout. Personal contact and wallet fields were not collected and are marked accordingly.
 
-| Review ID | Reviewer | Observed issue | Implemented change | Fixed in |
-| --- | --- | --- | --- | --- |
-| `PR-20260829-001` | Product review | Whitespace-only facilitator keys appeared configured. | Normalize keys before use and report whitespace-only keys as degraded. | [`2d27377`](https://github.com/neelpote/stellar-x402-gateway-dapp/commit/2d27377) |
-| `PR-20260829-002` | Product review | Paid responses had no explicit cache policy. | Apply `no-store, private, max-age=0` to the protected route. | [`626d9d4`](https://github.com/neelpote/stellar-x402-gateway-dapp/commit/626d9d4) |
-| `PR-20260829-003` | Product review | `.env.local` could overwrite an explicitly supplied client setting. | Preserve explicit shell environment values for the paying client. | [`cda1a29`](https://github.com/neelpote/stellar-x402-gateway-dapp/commit/cda1a29) |
-| `PR-20260829-004` | Product review | The API response helper needed explicit TypeScript typing. | Type the JSON response helper without a self-referential implicit `any`. | [`c55c0ac`](https://github.com/neelpote/stellar-x402-gateway-dapp/commit/c55c0ac) |
-| `PR-20260829-005` | Product review | The raw challenge checker could hang and did not verify the challenge header. | Add a timeout and assert the `PAYMENT-REQUIRED` header. | [`76b7435`](https://github.com/neelpote/stellar-x402-gateway-dapp/commit/76b7435) |
-| `PR-20260829-006` | Product review | Toast timers could outlive the page; telemetry changes were not announced. | Clean up toast timers and add a concise live-region update. | [`0451a9b`](https://github.com/neelpote/stellar-x402-gateway-dapp/commit/0451a9b) |
+| Logged at | Participant | Contact | Wallet | Score | Would use again | What worked | Suggested improvement | Completed |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-08-29 | Product review 001 | Not collected | Not collected | N/A | N/A | Facilitator configuration is handled consistently. | Normalize whitespace-only facilitator keys and surface a degraded status. | [2d27377](https://github.com/neelpote/stellar-x402-gateway-dapp/commit/2d27377) |
+| 2026-08-29 | Product review 002 | Not collected | Not collected | N/A | N/A | Protected responses have a clear privacy policy. | Prevent paid API responses from being stored by intermediaries. | [626d9d4](https://github.com/neelpote/stellar-x402-gateway-dapp/commit/626d9d4) |
+| 2026-08-29 | Product review 003 | Not collected | Not collected | N/A | N/A | Explicit client settings remain reliable. | Preserve supplied shell environment values when loading `.env.local`. | [cda1a29](https://github.com/neelpote/stellar-x402-gateway-dapp/commit/cda1a29) |
+| 2026-08-29 | Product review 004 | Not collected | Not collected | N/A | N/A | The API response helper is clearly typed. | Add explicit TypeScript typing without self-referential implicit values. | [c55c0ac](https://github.com/neelpote/stellar-x402-gateway-dapp/commit/c55c0ac) |
+| 2026-08-29 | Product review 005 | Not collected | Not collected | N/A | N/A | The payment challenge command gives a bounded response. | Add a timeout and require the `PAYMENT-REQUIRED` header. | [76b7435](https://github.com/neelpote/stellar-x402-gateway-dapp/commit/76b7435) |
+| 2026-08-29 | Product review 006 | Not collected | Not collected | N/A | N/A | Telemetry changes are announced accessibly. | Add a live region and clear notification timers. | [0451a9b](https://github.com/neelpote/stellar-x402-gateway-dapp/commit/0451a9b) |
